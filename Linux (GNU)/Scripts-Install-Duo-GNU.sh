@@ -148,15 +148,6 @@ check_tools() {
   # Check for nano
   check_install_package "nano" "nano --version" "nano" || main_menu
 
-
-   # ---------------------------------------------------------------------------
-  # # Check for gcc
-  # check_install_package "GCC" "gcc --version" "gcc" || main_menu
-  
-  # # Check for OpenSSL
-  # check_install_package "OpenSSL" "openssl version" "libssl-dev" || main_menu
-
-  # ---------------------------------------------------------------------------
   
   # Check for build-essential (using apt-get)
   dpkg -l | grep -qw build-essential
@@ -212,9 +203,6 @@ install_duo() {
   # check_install_package "OpenSSL" "openssl version" "libssl-dev"
 
  # ---------------------------------------------------------------------------
-
-  # Check wget installation
-  check_install_package "wget" "wget --version" "wget"
 
   # Check for existing Duo Unix files
   DUO_FILE_1="duo_unix-latest.tar.gz"
