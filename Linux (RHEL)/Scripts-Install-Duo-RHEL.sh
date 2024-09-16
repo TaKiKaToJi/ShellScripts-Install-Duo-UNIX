@@ -124,7 +124,7 @@ main_menu() {
       main_menu
       ;;
     q)
-      confirm_delete
+      self_delete
       ;;
     *)
       print_red "Invalid choice, please try again."
@@ -319,26 +319,12 @@ uninstall_duo() {
   main_menu
 }
 
-
-# Function to confirm script deletion
-confirm_delete() {
-  read -p "delete this script? (y/n): " CONFIRM
-  case $CONFIRM in
-    [Yy])
-      echo "Deleting script..."
-      rm -- "$0"
-      rm -- "$0"
-      rm -- "$0"
-      echo "Script deleted."
-      ;;
-    [Nn])
-      echo "Script not deleted."
-      ;;
-    *)
-      print_red "Invalid choice. Exiting."
-      ;;
-  esac
+# Function to delete this script
+self_delete() {
+    print_green "Deleting this script..."
+    rm -- "$0"
 }
+
 
 # Start with the main menu
 main_menu
