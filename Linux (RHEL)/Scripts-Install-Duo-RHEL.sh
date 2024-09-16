@@ -124,7 +124,7 @@ main_menu() {
       main_menu
       ;;
     q)
-      self_delete
+      confirm_delete
       ;;
     *)
       print_red "Invalid choice, please try again."
@@ -158,13 +158,13 @@ install_duo() {
   sleep 5
 
   # Check GCC installation
-  check_install_package "GCC" "gcc --version" "yum install -y gcc"
+  check_install_package "gcc" "rpm -qi gcc" "yum install -y gcc"
 
   # Install OpenSSL
-  check_install_package "OpenSSL" "rpm -qi openssl-devel" "yum install -y openssl-devel"
+  check_install_package "openssl-devel" "rpm -qi openssl-devel" "yum install -y openssl-devel"
 
   # Check wget installation
-  check_install_package "wget" "wget --version" "yum install -y wget"
+  check_install_package "wget" "rpm -qi wget" "yum install -y wget"
 
     # Check for existing Duo Unix files
   DUO_FILE_1="duo_unix-latest.tar.gz"
@@ -319,12 +319,26 @@ uninstall_duo() {
   main_menu
 }
 
-# Function to delete this script
-self_delete() {
-    print_green "Deleting this script..."
-    rm -- "$0"
-}
 
+# Function to confirm script deletion
+confirm_delete() {
+  read -p "delete this script? (y/n): " CONFIRM
+  case $CONFIRM in
+    [Yy])
+      echo "Deleting script..."
+      rm -- "$0"
+      rm -- "$0"
+      rm -- "$0"
+      echo "Script deleted."
+      ;;
+    [Nn])
+      echo "Script not deleted."
+      ;;
+    *)
+      print_red "Invalid choice. Exiting."
+      ;;
+  esac
+}
 
 # Start with the main menu
 main_menu
