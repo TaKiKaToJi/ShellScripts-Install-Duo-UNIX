@@ -185,6 +185,12 @@ check_tools() {
 
 # Function to install Duo
 install_duo() {
+# Check if curl is installed
+if ! command -v curl &> /dev/null; then
+  echo -e "\033[0;31m'curl' is not installed. Please install it to check internet connectivity.\033[0m"
+  exit 1
+fi
+
 # Check internet connection using curl
 echo "Checking internet connection..."
 curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null
