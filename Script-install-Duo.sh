@@ -356,7 +356,7 @@ install_duo() {
     show_loading_animation 2
   }
 
-  # Call the function where necessary in your script
+  # Call the function
   show_duo_config
 
   # Edit SSH configuration
@@ -481,6 +481,7 @@ uninstall_duo() {
 self_delete() {
     print_green "Deleting this script..."
     rm -- "$0"
+    main_menu
 }
 
 # Function to display main menu
@@ -492,7 +493,7 @@ main_menu() {
   echo "3) Check OS Version"
   echo "4) Check Tools"
   echo "5) Check passwd"
-  echo "6) Quit"
+  echo "6) Delete Script"
   read -p "Enter your choice: " CHOICE
 
   case $CHOICE in
