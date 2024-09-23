@@ -450,7 +450,7 @@ uninstall_duo() {
     sudo rm -f /usr/lib/libduo.*
     sudo rmdir /etc/duo
 
-    show_progress_bar 5
+    show_progress_bar 3
 
     # Edit SSH configuration
     echo "Editing SSH configuration..."
