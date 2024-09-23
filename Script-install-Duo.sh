@@ -341,16 +341,19 @@ install_duo() {
     echo ""
     echo "----------------------------------------"
     echo ""
+    echo ""
     echo -e "\e[38;2;0;255;0m\e[1m# Duo 2FA login\e[0m"
     echo "ForceCommand /usr/sbin/login_duo"
     echo "PermitTunnel no"
     echo "AllowTcpForwarding no"
+    echo ""
     echo ""
     echo "----------------------------------------"
     echo ""
     echo "Please manually select and copy the above configuration text."
     echo "Right-click to copy, then paste it where needed."
     read -p "Press Enter to continue..."
+    show_loading_animation 2
   }
 
   # Call the function where necessary in your script
@@ -377,7 +380,7 @@ install_duo() {
   # Restart SSH service
 restart_ssh_service() {
   print_yellow "Restarting SSH service..."
-show_loading_animation 3
+show_loading_animation 2
   # Attempt to restart SSH service based on OS type
   if [[ "$OS" == "Debian-Based" || "$OS" == "Red Hat-Based" ]]; then
     if sudo systemctl restart sshd; then
