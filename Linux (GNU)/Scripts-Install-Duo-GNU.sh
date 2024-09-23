@@ -185,16 +185,19 @@ check_tools() {
 
 # Function to install Duo
 install_duo() {
-  # Ping check
-  echo "Checking internet connection..."
-  ping -c 1 google.com
-  if [ $? -ne 0 ]; then
-    print_red "Internet no connection"
-    main_menu
-  else
-    echo "Internet is connected."
-  fi
-  sleep 5
+# Check internet connection using curl
+echo "Checking internet connection..."
+curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null
+
+if [ $? -ne 0 ]; then
+  echo -e "\033[0;31mInternet not connected\033[0m" # Print in red
+  main_menu
+else
+  echo "Internet is connected."
+fi
+
+sleep 5
+
 
  # ---------------------------------------------------------------------------
 
