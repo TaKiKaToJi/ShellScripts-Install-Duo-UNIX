@@ -479,9 +479,10 @@ uninstall_duo() {
 
 # Function to delete this script
 self_delete() {
-    print_green "Deleting this script..."
-    rm -- "$0"
-    main_menu
+  print_green "Deleting this script..."
+  trap 'rm -- "$0"' EXIT
+  exec rm -- "$0"
+  main_menu
 }
 
 # Function to display main menu
