@@ -115,10 +115,8 @@ check_os_version() {
 detect_os() {
   if [ -f /etc/redhat-release ]; then
     OS="Red Hat-Based"
-    ADMIN_GROUP="wheel"
   elif [ -f /etc/debian_version ]; then
     OS="Debian-Based"
-    ADMIN_GROUP="sudo"
   else
     OS="Unsupported"
   fi
@@ -247,27 +245,74 @@ show_loading_animation 3  # Wait before proceeding
   main_menu  # Return to main menu after checking tools
 }
 
-# Function to install Duo
 check_internet_install_duo() {
-  # Check internet connection using curl
   echo "Checking internet connection..."
-  curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null
 
-  if [ $? -ne 0 ]; then
-    echo -e "\033[0;31mInternet not connected\033[0m" # Print in red
-    main_menu
+  # Check 1: Using curl to fetch Google or another webpage
+  echo "Check 1: Testing with curl to Google..."
+  curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null
+  if [ $? -eq 0 ]; then
+    echo "Check 1 passed: Internet is connected (via curl)."
+    run_install_duo
+    return
   else
-    echo "Internet is connected."
+    echo -e "\033[0;31mCheck 1 failed: Unable to connect via curl\033[0m"
   fi
 
+  # Check 2: Using wget to download headers from Google
+  echo "Check 2: Testing with wget to Google..."
+  wget --spider -q http://www.google.com
+  if [ $? -eq 0 ]; then
+    echo "Check 2 passed: Internet is connected (via wget)."
+    run_install_duo
+    return
+  else
+    echo -e "\033[0;31mCheck 2 failed: Unable to connect via wget\033[0m"
+  fi
+
+  # Check 3: DNS resolution test using dig
+  echo "Check 3: Testing DNS resolution with dig..."
+  dig +short www.google.com > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    echo "Check 3 passed: Internet is connected (via DNS resolution with dig)."
+    run_install_duo
+    return
+  else
+    echo -e "\033[0;31mCheck 3 failed: DNS resolution unsuccessful\033[0m"
+  fi
+
+  # If all three checks failed, prompt to bypass
+  echo -e "\033[0;31mAll internet checks failed.\033[0m"
+  while true; do
+    read -p "Do you want to bypass the internet check and continue? (Y/n): " choice
+    case "$choice" in
+      [Yy]* )
+        echo "Bypassing internet check and proceeding with installation..."
+        run_install_duo
+        return
+        ;;
+      [Nn]* )
+        echo "Exiting to main menu. Please check your internet connection."
+        main_menu
+        return
+        ;;
+      * )
+        echo "Please answer Y (yes) or N (no)."
+        ;;
+    esac
+  done
+}
+
+run_install_duo() {
   show_loading_animation 3
   echo "----------------------------------"
   
   check_tools_and_install  # Call the function to check tools and install
-  echo "Installing Duo..." ; show_loading_animation 5
+  print_yellow "Installing Duo..." 
+  show_loading_animation 5
   echo "----------------------------------"
-  # Call install_duo when needed
-    install_duo
+  
+  install_duo  # Call to the Duo installation function
 }
 
 
@@ -381,8 +426,9 @@ install_duo() {
 
   # Restart SSH service
 restart_ssh_service() {
+  echo "--------------------------------------------"
   print_yellow "Restarting SSH service..."
-show_loading_animation 2
+show_loading_animation 1
   # Attempt to restart SSH service based on OS type
   if [[ "$OS" == "Debian-Based" || "$OS" == "Red Hat-Based" ]]; then
     if sudo systemctl restart sshd; then
@@ -416,9 +462,13 @@ uninstall_duo() {
     print_yellow "Uninstalling Duo..."
 
     # Remove Duo files
+    show_progress_bar 1
     sudo rm -rf /etc/duo/login_duo.conf
+    show_progress_bar 1
     sudo rm -rf /usr/sbin/login_duo
+    show_progress_bar 1
     sudo rm -rf /usr/lib/libduo.*
+    show_progress_bar 1
     sudo rmdir /etc/duo
     
     show_progress_bar 3
@@ -482,9 +532,22 @@ uninstall_duo() {
 #=============================================
 #adduser
 
+# Function to detect OS and set the OS variable
+detect_os_adduser() {
+  if [ -f /etc/redhat-release ]; then
+    OS="Red Hat-Based"
+    ADMIN_GROUP="wheel"
+  elif [ -f /etc/debian_version ]; then
+    OS="Debian-Based"
+    ADMIN_GROUP="sudo"
+  else
+    echo "Unsupported OS. Exiting."
+    exit 1
+  fi
+}
+
 # File to store users and passwords
 USERS_FILE="USERS.DB"
-
 
 # Function to add a user, set a password, and add to the admin group
 add_user() {
@@ -498,15 +561,15 @@ add_user() {
     fi
 
     # Add user
-    sudo adduser --quiet --disabled-password --gecos "" "$USERNAME"
+    sudo adduser $USERNAME
 
     # Set password
     echo "$USERNAME:$PASSWORD" | sudo chpasswd
 
-    # Add user to the admin group (wheel or sudo)
-    sudo usermod -aG $ADMIN_GROUP $USERNAME
+    # Add the user to the admin group (wheel or sudo)
+    sudo usermod -aG "$ADMIN_GROUP" "$USERNAME"
 
-    echo "User $USERNAME created and added to the $ADMIN_GROUP group."
+    echo -e "User \e[38;2;0;255;0m$USERNAME\e[0m created and added to the \e[38;2;0;255;0m$ADMIN_GROUP\e[0m group."
 }
 
 # Function to manage users via the USERS.DB file
@@ -515,7 +578,7 @@ manage_users() {
         echo "File $USERS_FILE does not exist. Creating $USERS_FILE..."
         touch "$USERS_FILE"
     fi
-
+    echo "--------------------------------------------"
     echo "Opening $USERS_FILE for editing..."
     nano "$USERS_FILE"
 }
@@ -523,104 +586,99 @@ manage_users() {
 # Function to add users from the USERS.DB file
 add_users_from_file() {
     if [ ! -f "$USERS_FILE" ]; then
-        echo "File $USERS_FILE not found. Exiting."
+        print_yellow "File $USERS_FILE not found. Exiting."
         exit 1
     fi
 
+    # Read the USERS.DB file and add each user
     while IFS=: read -r username password; do
         if [[ -n "$username" && -n "$password" ]]; then
             add_user "$username" "$password"
         else
-            echo "Skipping invalid entry in $USERS_FILE: $username:$password"
+            print_yellow "Skipping invalid entry in $USERS_FILE: $username:$password"
         fi
     done < "$USERS_FILE"
 
-    echo "All users from $USERS_FILE have been added."
+    print_green "All users from $USERS_FILE have been added."
+    cleanup
+    main_menu  # Return to the main menu after adding all users
 }
 
 # Function to remove the USERS.DB file after use
 cleanup() {
     if [ -f "$USERS_FILE" ]; then
         rm -f "$USERS_FILE"
-        echo "Removed $USERS_FILE."
+        print_green "Removed $USERS_FILE."
     else
-        echo "$USERS_FILE does not exist. No cleanup needed."
+        print_yellow "$USERS_FILE does not exist. No cleanup needed."
     fi
 }
 
-# Main script logic
-detect_os
-
-
-
-
-
-
-
-
-#=============================================
-
-
+# Detect the OS at the beginning of your script
+detect_os_adduser
 
 # Function to delete this script
 self_delete() {
-  print_green "Deleting this script..."
-  trap 'rm -- "$0"' EXIT
-  exec rm -- "$0"
-  main_menu
+    print_green "Deleting this script..."
+    trap 'rm -- "$0"' EXIT
+    exec rm -- "$0"
 }
 
-# Function to display main menu
+# Function to display the main menu
 main_menu() {
-  echo "--------------------------------------------"
-  echo "Select an option:"
-  echo "1) Install Duo"
-  echo "2) Uninstall Duo"
-  echo "3) Check OS Version"
-  echo "4) Check Tools"
-  echo "5) Check passwd"
-  echo "6) Add users from $USERS_FILE"
-  echo "7) Manage users $USERS_FILE"
-  echo "8) Delete Script"
-  read -p "Enter your choice: " CHOICE
+    echo "--------------------------------------------"
+    echo "Select an option:"
+    echo "1) Install Duo"
+    echo "2) Uninstall Duo"
+    echo "3) Check OS Version"
+    echo "4) Check Tools"
+    echo "5) Check passwd"
+    echo "6) Add users from $USERS_FILE"
+    echo "7) Manage users $USERS_FILE"
+    echo "8) Delete Script"
+    read -p "Enter your choice: " CHOICE
+    echo "--------------------------------------------"
 
-  case $CHOICE in
-    1)
-      check_internet_install_duo
-      ;;
-    2)
-      uninstall_duo
-      ;;
-    3)
-      check_os_version 
-      ;;
-    4)
-      check_tools
-      ;;
-    5)
-      echo "--------------------------------------------"
-      echo ""
-      cut -d: -f1 /etc/passwd
-      echo ""
-      main_menu
-      ;;
-    6)
-      add_users_from_file
-      cleanup
-      ;;
-    7)
-      manage_users 
-      ;;
-    8)
-      self_delete 
-      ;;
-    *)
-      print_red "Invalid choice, please try again."
-      main_menu
-      ;;
-  esac
+    case $CHOICE in
+        1)
+            check_internet_install_duo
+            ;;
+        2)
+            uninstall_duo
+            ;;
+        3)
+            check_os_version 
+            ;;
+        4)
+            check_tools
+            ;;
+        5)
+            echo "--------------------------------------------"
+            echo ""
+            cut -d: -f1 /etc/passwd
+            echo ""
+            main_menu
+            ;;
+        6)
+            manage_users
+            add_users_from_file
+            ;;
+        7)
+            manage_users
+            main_menu # Return to main menu after managing users 
+            ;;
+        8)
+            self_delete 
+            ;;
+        *)
+            print_red "Invalid choice, please try again."
+            main_menu
+            ;;
+    esac
 }
 
-# Start the script with the main menu
 main_menu
+
+#=============================================
+
 
