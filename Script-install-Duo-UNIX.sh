@@ -115,8 +115,10 @@ check_os_version() {
 detect_os() {
   if [ -f /etc/redhat-release ]; then
     OS="Red Hat-Based"
+    ADMIN_GROUP="wheel"
   elif [ -f /etc/debian_version ]; then
     OS="Debian-Based"
+    ADMIN_GROUP="sudo"
   else
     OS="Unsupported"
   fi
@@ -477,6 +479,89 @@ uninstall_duo() {
 }
 
 
+#=============================================
+#adduser
+
+# File to store users and passwords
+USERS_FILE="USERS.DB"
+
+
+# Function to add a user, set a password, and add to the admin group
+add_user() {
+    USERNAME=$1
+    PASSWORD=$2
+
+    # Check if the user already exists
+    if id "$USERNAME" &>/dev/null; then
+        echo "User $USERNAME already exists. Skipping..."
+        return
+    fi
+
+    # Add user
+    sudo adduser --quiet --disabled-password --gecos "" "$USERNAME"
+
+    # Set password
+    echo "$USERNAME:$PASSWORD" | sudo chpasswd
+
+    # Add user to the admin group (wheel or sudo)
+    sudo usermod -aG $ADMIN_GROUP $USERNAME
+
+    echo "User $USERNAME created and added to the $ADMIN_GROUP group."
+}
+
+# Function to manage users via the USERS.DB file
+manage_users() {
+    if [ ! -f "$USERS_FILE" ]; then
+        echo "File $USERS_FILE does not exist. Creating $USERS_FILE..."
+        touch "$USERS_FILE"
+    fi
+
+    echo "Opening $USERS_FILE for editing..."
+    nano "$USERS_FILE"
+}
+
+# Function to add users from the USERS.DB file
+add_users_from_file() {
+    if [ ! -f "$USERS_FILE" ]; then
+        echo "File $USERS_FILE not found. Exiting."
+        exit 1
+    fi
+
+    while IFS=: read -r username password; do
+        if [[ -n "$username" && -n "$password" ]]; then
+            add_user "$username" "$password"
+        else
+            echo "Skipping invalid entry in $USERS_FILE: $username:$password"
+        fi
+    done < "$USERS_FILE"
+
+    echo "All users from $USERS_FILE have been added."
+}
+
+# Function to remove the USERS.DB file after use
+cleanup() {
+    if [ -f "$USERS_FILE" ]; then
+        rm -f "$USERS_FILE"
+        echo "Removed $USERS_FILE."
+    else
+        echo "$USERS_FILE does not exist. No cleanup needed."
+    fi
+}
+
+# Main script logic
+detect_os
+
+
+
+
+
+
+
+
+#=============================================
+
+
+
 # Function to delete this script
 self_delete() {
   print_green "Deleting this script..."
@@ -494,7 +579,9 @@ main_menu() {
   echo "3) Check OS Version"
   echo "4) Check Tools"
   echo "5) Check passwd"
-  echo "6) Delete Script"
+  echo "6) Add users from $USERS_FILE"
+  echo "7) Manage users $USERS_FILE"
+  echo "8) Delete Script"
   read -p "Enter your choice: " CHOICE
 
   case $CHOICE in
@@ -518,6 +605,13 @@ main_menu() {
       main_menu
       ;;
     6)
+      add_users_from_file
+      cleanup
+      ;;
+    7)
+      manage_users 
+      ;;
+    8)
       self_delete 
       ;;
     *)
