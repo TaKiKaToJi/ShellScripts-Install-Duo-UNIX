@@ -217,9 +217,9 @@ check_tools() {
 show_loading_animation 3  # Wait before proceeding
 
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "expect")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "expect")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl")
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -246,79 +246,77 @@ show_loading_animation 3  # Wait before proceeding
 }
 
 check_internet_install_duo() {
-  echo "Checking internet connection..."
+    echo "Checking internet connection..."
 
-# Check 1: Internet connectivity test using ping
-echo "Check 1: Testing internet connectivity with ping..."
-ping -c 1 www.google.com > /dev/null 2>&1
-if [ $? -eq 0 ]; then
-    echo "Check 3 passed: Internet is connected (via ping)."
-    
-    # Check if ports 80 and 443 are reachable
-    echo "Checking connectivity to port 80..."
-    nc -z -w 5 www.google.com 80 > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo "Port 80 is reachable."
-    else
-        echo -e "\033[0;31mPort 80 is not reachable\033[0m"
-    fi
+  # Check 1: Internet connectivity test using ping and port checks
+    echo "Check 1: Testing internet connectivity with ping..."
+    if ping -c 1 www.google.com > /dev/null 2>&1; then
+        echo "Check 1 passed: Internet is connected (via ping)."
 
-    echo "Checking connectivity to port 443..."
-    nc -z -w 5 www.google.com 443 > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo "Port 443 is reachable."
-    else
-        echo -e "\033[0;31mPort 443 is not reachable\033[0m"
-    fi
+        # Check if ports 80 and 443 are reachable
+        echo "Checking connectivity to port 80..."
+        if nc -z -w 5 www.google.com 443 > /dev/null 2>&1; then
+            echo "Port 80 is reachable."
+        else
+            echo -e "\033[0;31mPort 80 is not reachable\033[0m"
+        fi
 
-    run_install_duo
-else
-    echo -e "\033[0;31mCheck 3 failed: Internet connectivity unsuccessful (via ping)\033[0m"
-fi
+        echo "Checking connectivity to port 443..."
+        if nc -z -w 5 www.google.com 80 > /dev/null 2>&1; then
+            echo "Port 443 is reachable."
+        else
+            echo -e "\033[0;31mPort 443 is not reachable\033[0m"
+        fi
 
-  # Check 2: Using curl to fetch Google or another webpage
-  echo "Check 2: Testing with curl to Google..."
-  curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null
-  if [ $? -eq 0 ]; then
-    echo "Check 1 passed: Internet is connected (via curl)."
-    run_install_duo
-    return
-  else
-    echo -e "\033[0;31mCheck 1 failed: Unable to connect via curl\033[0m"
-  fi
-
-  # Check 3: Using wget to download headers from Google
-  echo "Check 3: Testing with wget to Google..."
-  wget --spider -q http://www.google.com
-  if [ $? -eq 0 ]; then
-    echo "Check 2 passed: Internet is connected (via wget)."
-    run_install_duo
-    return
-  else
-    echo -e "\033[0;31mCheck 2 failed: Unable to connect via wget\033[0m"
-  fi
-
-  # If all three checks failed, prompt to bypass
-  echo -e "\033[0;31mAll internet checks failed.\033[0m"
-  while true; do
-    read -p "Do you want to bypass the internet check and continue? (Y/n): " choice
-    case "$choice" in
-      [Yy]* )
-        echo "Bypassing internet check and proceeding with installation..."
         run_install_duo
         return
-        ;;
-      [Nn]* )
-        echo "Exiting to main menu. Please check your internet connection."
-        main_menu
+    else
+        echo -e "\033[0;31mCheck 1 failed: Internet connectivity unsuccessful (via ping)\033[0m"
+    fi
+
+    # Check 2: Using curl to fetch Google
+    echo "Check 2: Testing with curl to Google..."
+    if curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null; then
+        echo "Check 2 passed: Internet is connected (via curl)."
+        run_install_duo
         return
-        ;;
-      * )
-        echo "Please answer Y (yes) or N (no)."
-        ;;
-    esac
-  done
+    else
+        echo -e "\033[0;31mCheck 2 failed: Unable to connect via curl\033[0m"
+    fi
+
+    # Check 3: Using wget to download headers from Google
+    echo "Check 3: Testing with wget to Google..."
+    if wget --spider -q http://www.google.com; then
+        echo "Check 3 passed: Internet is connected (via wget)."
+        run_install_duo
+        return
+    else
+        echo -e "\033[0;31mCheck 3 failed: Unable to connect via wget\033[0m"
+    fi
+
+    # If all checks failed, prompt to bypass
+    echo -e "\033[0;31mAll internet checks failed.\033[0m"
+    while true; do
+        read -p "Do you want to bypass the internet check and continue? (Y/n): " choice
+        case "$choice" in
+            [Yy]* )
+                echo "Bypassing internet check and proceeding with installation..."
+                run_install_duo
+                return
+                ;;
+            [Nn]* )
+                echo "Exiting to main menu. Please check your internet connection."
+                main_menu
+                return
+                ;;
+            * )
+                echo "Please answer Y (yes) or N (no)."
+                ;;
+        esac
+    done
 }
+
+
 
 run_install_duo() {
   show_loading_animation 3
