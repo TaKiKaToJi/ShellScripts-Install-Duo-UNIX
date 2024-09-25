@@ -180,9 +180,9 @@ check_tools_and_install() {
 show_loading_animation 3  # Wait before proceeding
 
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar")
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -217,9 +217,9 @@ check_tools() {
 show_loading_animation 3  # Wait before proceeding
 
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar")
   else
     print_red "Unsupported OS: $OS"
     exit 1
