@@ -217,9 +217,9 @@ check_tools() {
 show_loading_animation 3  # Wait before proceeding
 
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "expect")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "expect")
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -272,11 +272,11 @@ check_internet_install_duo() {
 
   # Check 3: DNS resolution test using dig
   echo "Check 3: Testing DNS resolution with dig..."
-  dig +short www.google.com > /dev/null 2>&1
+  #dig +short www.google.com > /dev/null 2>&1
   if [ $? -eq 0 ]; then
     echo "Check 3 passed: Internet is connected (via DNS resolution with dig)."
     run_install_duo
-    return
+    return 
   else
     echo -e "\033[0;31mCheck 3 failed: DNS resolution unsuccessful\033[0m"
   fi
@@ -314,7 +314,6 @@ run_install_duo() {
   
   install_duo  # Call to the Duo installation function
 }
-
 
 # Function to install Duo
 install_duo() {
@@ -386,7 +385,7 @@ install_duo() {
   show_duo_config() {
     clear
     echo ""
-    echo "----------------------------------------"
+    echo "--------------------------------------------"
     echo ""
     echo ""
     echo -e "\e[38;2;0;255;0m\e[1m# Duo 2FA login\e[0m"
@@ -395,7 +394,7 @@ install_duo() {
     echo "AllowTcpForwarding no"
     echo ""
     echo ""
-    echo "----------------------------------------"
+    echo "--------------------------------------------"
     echo ""
     echo "Please manually select and copy the above configuration text."
     echo "Right-click to copy, then paste it where needed."
@@ -424,11 +423,15 @@ install_duo() {
 
 
 
-  # Restart SSH service
+# Restart SSH service
 restart_ssh_service() {
   echo "--------------------------------------------"
   print_yellow "Restarting SSH service..."
-show_loading_animation 1
+  show_loading_animation 1
+
+  # Detect OS before attempting to restart the SSH service
+  detect_os
+
   # Attempt to restart SSH service based on OS type
   if [[ "$OS" == "Debian-Based" || "$OS" == "Red Hat-Based" ]]; then
     if sudo systemctl restart sshd; then
@@ -451,7 +454,6 @@ show_loading_animation 1
 }
 
 
-
 # Function to uninstall Duo
 uninstall_duo() {
   if [ ! -d "/etc/duo" ]; then
@@ -464,12 +466,16 @@ uninstall_duo() {
     # Remove Duo files
     show_progress_bar 1
     sudo rm -rf /etc/duo/login_duo.conf
+    print_green "Removed login_duo.conf"
     show_progress_bar 1
     sudo rm -rf /usr/sbin/login_duo
+    print_green "Removed login_duo"
     show_progress_bar 1
     sudo rm -rf /usr/lib/libduo.*
+    print_green "Removed libduo.*"
     show_progress_bar 1
     sudo rmdir /etc/duo
+    print_green "Removed dir duo"
     
     show_progress_bar 3
     
@@ -491,132 +497,6 @@ uninstall_duo() {
 }
 
 
-# Function to uninstall Duo
-uninstall_duo() {
-  if [ ! -d "/etc/duo" ]; then
-    print_yellow "Duo is already uninstalled."
-    show_loading_animation 3
-  else
-    
-    print_yellow "Uninstalling Duo..."
-    # Remove Duo files
-    sudo rm -f /etc/duo/login_duo.conf
-    sudo rm -f /usr/sbin/login_duo
-    sudo rm -f /usr/lib/libduo.*
-    sudo rmdir /etc/duo
-
-    show_progress_bar 3
-
-    # Edit SSH configuration
-    echo "Editing SSH configuration..."
-    cd /etc/ssh
-    nano sshd_config
-    if [ $? -ne 0 ]; then
-      vi sshd_config
-    fi
-    # Restart SSH service
-    echo "Restarting SSH service..."
-    sudo systemctl restart sshd
-    if [ $? -ne 0 ]; then
-      print_red "Error restarting SSH service"
-    else
-      print_green "SSH service restarted successfully."
-    fi
-    print_green "Duo uninstallation completed."
-  fi
-
-  main_menu
-}
-
-
-#=============================================
-#adduser
-
-# Function to detect OS and set the OS variable
-detect_os_adduser() {
-  if [ -f /etc/redhat-release ]; then
-    OS="Red Hat-Based"
-    ADMIN_GROUP="wheel"
-  elif [ -f /etc/debian_version ]; then
-    OS="Debian-Based"
-    ADMIN_GROUP="sudo"
-  else
-    echo "Unsupported OS. Exiting."
-    exit 1
-  fi
-}
-
-# File to store users and passwords
-USERS_FILE="USERS.DB"
-
-# Function to add a user, set a password, and add to the admin group
-add_user() {
-    USERNAME=$1
-    PASSWORD=$2
-
-    # Check if the user already exists
-    if id "$USERNAME" &>/dev/null; then
-        echo "User $USERNAME already exists. Skipping..."
-        return
-    fi
-
-    # Add user
-    sudo adduser $USERNAME
-
-    # Set password
-    echo "$USERNAME:$PASSWORD" | sudo chpasswd
-
-    # Add the user to the admin group (wheel or sudo)
-    sudo usermod -aG "$ADMIN_GROUP" "$USERNAME"
-
-    echo -e "User \e[38;2;0;255;0m$USERNAME\e[0m created and added to the \e[38;2;0;255;0m$ADMIN_GROUP\e[0m group."
-}
-
-# Function to manage users via the USERS.DB file
-manage_users() {
-    if [ ! -f "$USERS_FILE" ]; then
-        echo "File $USERS_FILE does not exist. Creating $USERS_FILE..."
-        touch "$USERS_FILE"
-    fi
-    echo "--------------------------------------------"
-    echo "Opening $USERS_FILE for editing..."
-    nano "$USERS_FILE"
-}
-
-# Function to add users from the USERS.DB file
-add_users_from_file() {
-    if [ ! -f "$USERS_FILE" ]; then
-        print_yellow "File $USERS_FILE not found. Exiting."
-        exit 1
-    fi
-
-    # Read the USERS.DB file and add each user
-    while IFS=: read -r username password; do
-        if [[ -n "$username" && -n "$password" ]]; then
-            add_user "$username" "$password"
-        else
-            print_yellow "Skipping invalid entry in $USERS_FILE: $username:$password"
-        fi
-    done < "$USERS_FILE"
-
-    print_green "All users from $USERS_FILE have been added."
-    cleanup
-    main_menu  # Return to the main menu after adding all users
-}
-
-# Function to remove the USERS.DB file after use
-cleanup() {
-    if [ -f "$USERS_FILE" ]; then
-        rm -f "$USERS_FILE"
-        print_green "Removed $USERS_FILE."
-    else
-        print_yellow "$USERS_FILE does not exist. No cleanup needed."
-    fi
-}
-
-# Detect the OS at the beginning of your script
-detect_os_adduser
-
 # Function to delete this script
 self_delete() {
     print_green "Deleting this script..."
@@ -633,9 +513,7 @@ main_menu() {
     echo "3) Check OS Version"
     echo "4) Check Tools"
     echo "5) Check passwd"
-    echo "6) Add users from $USERS_FILE"
-    echo "7) Manage users $USERS_FILE"
-    echo "8) Delete Script"
+    echo "6) Delete Script"
     read -p "Enter your choice: " CHOICE
     echo "--------------------------------------------"
 
@@ -660,14 +538,6 @@ main_menu() {
             main_menu
             ;;
         6)
-            manage_users
-            add_users_from_file
-            ;;
-        7)
-            manage_users
-            main_menu # Return to main menu after managing users 
-            ;;
-        8)
             self_delete 
             ;;
         *)
