@@ -330,7 +330,6 @@ run_install_duo() {
   install_duo  # Call to the Duo installation function
 }
 
-# Function to install Duo
 install_duo() {
 
   # Download Duo Unix
@@ -365,35 +364,61 @@ install_duo() {
     main_menu
   fi
 
-  # Install Duo Unix
-  echo "Installing Duo Unix..."
-  ./configure --prefix=/usr && make && sudo make install
-  if [ $? -ne 0 ]; then
-    print_red "Error during Duo Unix installation"
-    main_menu
+  # Check if login_duo.conf already exists
+  if [ -f /etc/duo/login_duo.conf ] || [ -f /etc/login_duo.conf ]; then
+    print_green "Duo Unix is already configured."
+    echo "Configuring Duo Unix..."
+    
+    # If the config file exists, edit it
+    if [ -f /etc/duo/login_duo.conf ]; then
+      echo "Found login_duo.conf file."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/duo/login_duo.conf
+      else
+        vi /etc/duo/login_duo.conf
+      fi
+    else
+      echo "Found login_duo.conf file in /etc."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/login_duo.conf
+      else
+        vi /etc/login_duo.conf
+      fi
+    fi
+    
+    # Change directory to Duo Unix source directory for configuration
+    cd "$DUO_DIR"
   else
-    print_green "Duo Unix installed successfully."
-  fi
+    # Install Duo Unix
+    echo "Installing Duo Unix..."
+    ./configure --prefix=/usr && make && sudo make install
+    if [ $? -ne 0 ]; then
+      print_red "Error during Duo Unix installation"
+      main_menu
+    else
+      print_green "Duo Unix installed successfully."
+    fi
 
-  # Configure Duo Unix
-  echo "Configuring Duo Unix..."
-  if [ -f /etc/duo/login_duo.conf ]; then
-    echo "Found login_duo.conf file."
-    if [ -x "$(command -v nano)" ]; then
-      nano /etc/duo/login_duo.conf
+    # Configure Duo Unix
+    echo "Configuring Duo Unix..."
+    if [ -f /etc/duo/login_duo.conf ]; then
+      echo "Found login_duo.conf file."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/duo/login_duo.conf
+      else
+        vi /etc/duo/login_duo.conf
+      fi
+    elif [ -f /etc/login_duo.conf ]; then
+      echo "Found login_duo.conf file in /etc."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/login_duo.conf
+      else
+        vi /etc/login_duo.conf
+      fi
     else
-      vi /etc/duo/login_duo.conf
+      print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
+      main_menu
     fi
-  elif [ -f /etc/login_duo.conf ]; then
-    echo "Found login_duo.conf file in /etc."
-    if [ -x "$(command -v nano)" ]; then
-      nano /etc/login_duo.conf
-    else
-      vi /etc/login_duo.conf
-    fi
-  else
-    print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
-    main_menu
   fi
 
   # Function to display Duo 2FA login configuration
@@ -429,12 +454,13 @@ install_duo() {
     vi sshd_config
   fi
 
- # Restart SSH service after configuration
+  # Restart SSH service after configuration
   restart_ssh_service
 
   print_green "Duo installation completed."
   main_menu
 }
+
 
 
 
