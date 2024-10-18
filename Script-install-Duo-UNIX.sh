@@ -513,7 +513,7 @@ restart_ssh_service() {
     fi
   else
     print_red "Unsupported OS for SSH service restart."
-    main_menu
+    # main_menu
   fi
 }
 
