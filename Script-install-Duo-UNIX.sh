@@ -2,8 +2,7 @@
 
 # Display colored and large text
   echo -e "\e[38;2;0;255;0m\e[1m
-░█░░▒█▒██▀░█▒░░▄▀▀░▄▀▄░█▄▒▄█▒██▀░░░█░█▄░█░▀█▀▒██▀▒█▀▄░█▄░█▒██▀░▀█▀░░░▀█▀░█▄█▒▄▀▄░█░█▒░▒▄▀▄░█▄░█░█▀▄
-░▀▄▀▄▀░█▄▄▒█▄▄░▀▄▄░▀▄▀░█▒▀▒█░█▄▄▒░░█░█▒▀█░▒█▒░█▄▄░█▀▄░█▒▀█░█▄▄░▒█▒▒░░▒█▒▒█▒█░█▀█░█▒█▄▄░█▀█░█▒▀█▒█▄▀
+DUO INSTALLER TOOLS
 \e[0m"
 
 # Function to print messages in red
@@ -107,20 +106,9 @@ check_os_version() {
   print_green "Hostname: $HOSTNAME"
   print_green "IP Address: $IP_ADDRESS"
 
-  main_menu
+  # main_menu
 }
 
-
-# Function to detect OS and set the OS variable
-detect_os() {
-  if [ -f /etc/redhat-release ]; then
-    OS="Red Hat-Based"
-  elif [ -f /etc/debian_version ]; then
-    OS="Debian-Based"
-  else
-    OS="Unsupported"
-  fi
-}
 
 # Function to clean package caches based on OS type
 clean_package_cache() {
@@ -139,33 +127,62 @@ clean_package_cache() {
   fi
 }
 
+
+
+# Function to detect OS and set the OS variable
+detect_os() {
+  if [ -f /etc/redhat-release ]; then
+    OS="Red Hat-Based"
+    INSTALL_COMMAND="sudo yum install"  # Red Hat-based installation command
+  elif [ -f /etc/debian_version ]; then
+    OS="Debian-Based"
+    INSTALL_COMMAND="sudo apt-get install"
+  else
+    OS="Unsupported"
+  fi
+}
+
+
 # Function to check and install a package based on OS type
 check_install_package() {
   PACKAGE_NAME=$1
 
-  # Detect the OS type and set the package manager and command accordingly
-  if [ "$OS" == "Red Hat-Based" ]; then
-    COMMAND_CHECK="rpm -q $PACKAGE_NAME"
-    INSTALL_COMMAND="sudo yum install -y $PACKAGE_NAME"
-  elif [ "$OS" == "Debian-Based" ]; then
-    COMMAND_CHECK="dpkg -l | grep '^ii' | grep $PACKAGE_NAME"
-    INSTALL_COMMAND="sudo apt-get install -y $PACKAGE_NAME"
-  else
+  # Call detect_os function to set the OS variable if not already set
+  if [ -z "$OS" ]; then
+    detect_os
+  fi
+
+  # Check if OS is unsupported before proceeding
+  if [ "$OS" == "Unsupported" ]; then
     print_red "Unsupported OS."
     return 1
   fi
 
+  # Check the package manager command dynamically based on the OS
+  if [ "$OS" == "Red Hat-Based" ]; then
+    COMMAND_CHECK="rpm -q $PACKAGE_NAME"
+  elif [ "$OS" == "Debian-Based" ]; then
+    COMMAND_CHECK="dpkg -l | grep '^ii' | grep $PACKAGE_NAME"
+  fi
+
   # Check if the package is installed
   if eval "$COMMAND_CHECK" &> /dev/null; then
-    print_green "$PACKAGE_NAME is already installed."
+    print_green "$PACKAGE_NAME is already installed.  ✓ "
     return 0
   else
     print_yellow "$PACKAGE_NAME not found. Installing $PACKAGE_NAME..."
-    if eval "$INSTALL_COMMAND"; then
+    if eval "$INSTALL_COMMAND -y $PACKAGE_NAME"; then
       print_green "$PACKAGE_NAME installed successfully."
       return 0
     else
+      echo "----------------------------------"
       print_red "Failed to install $PACKAGE_NAME."
+      echo "----------------------------------"
+      echo "You may try to manually run:"
+      echo ""
+      print_red "$INSTALL_COMMAND $PACKAGE_NAME"
+      echo ""
+      echo "----------------------------------"
       return 1
     fi
   fi
@@ -176,9 +193,9 @@ check_tools_and_install() {
   detect_os  # Ensure OS is detected and set
   clean_package_cache  # Run clean package cache only once
 
-# Call the function with the duration you want (e.g., 5 seconds)
-show_loading_animation 3  # Wait before proceeding
+  show_loading_animation 3  # Wait before proceeding
 
+  # Define tool lists based on detected OS
   if [ "$OS" == "Red Hat-Based" ]; then
     TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar")
   elif [ "$OS" == "Debian-Based" ]; then
@@ -195,23 +212,40 @@ show_loading_animation 3  # Wait before proceeding
     check_install_package "$TOOL"
     if [ $? -ne 0 ]; then
       ALL_INSTALLED=false
-      INSTALLATION_OCCURRED=true  # Mark that something has been installed
+      INSTALLATION_OCCURRED=true  # Mark that something has been installed or attempted
     fi
   done
 
   if [ "$ALL_INSTALLED" = true ]; then
     print_green "All tools are already installed."
   elif [ "$INSTALLATION_OCCURRED" = true ]; then
-    print_yellow "Some tools were missing and have been installed."
+    print_yellow "Some tools were missing."
   fi
-
-  #main_menu  # Return to main menu after checking tools
 }
+
+# Function to install Duo
+run_install_duo() {
+  show_loading_animation 3
+  echo "----------------------------------"
+  
+  check_tools_and_install  # Call the function to check tools and install
+  
+  # Skip Duo installation if any tools were missing and installed
+  if [ "$INSTALLATION_OCCURRED" = true ]; then
+    print_yellow "Some Tools were missing. Skipping Duo installation for now."
+    main_menu  # Return to main menu after checking tools
+  else
+    print_yellow "Installing Duo..."
+    show_loading_animation 5
+    echo "----------------------------------"
+    install_duo  # Call to the Duo installation function
+  fi
+}
+
 
 # Function to check tools
 check_tools() {
   detect_os  # Ensure OS is detected and set
-  clean_package_cache  # Run clean package cache only once
 
 # Call the function with the duration you want (e.g., 5 seconds)
 show_loading_animation 3  # Wait before proceeding
@@ -239,11 +273,13 @@ show_loading_animation 3  # Wait before proceeding
   if [ "$ALL_INSTALLED" = true ]; then
     print_green "All tools are already installed."
   elif [ "$INSTALLATION_OCCURRED" = true ]; then
-    print_yellow "Some tools were missing and have been installed."
+  
+    print_yellow "Some tools were missing"
   fi
 
-  main_menu  # Return to main menu after checking tools
+  # main_menu  # Return to main menu after checking tools
 }
+
 
 check_internet_install_duo() {
     echo "Checking internet connection..."
@@ -316,19 +352,6 @@ check_internet_install_duo() {
     done
 }
 
-
-
-run_install_duo() {
-  show_loading_animation 3
-  echo "----------------------------------"
-  
-  check_tools_and_install  # Call the function to check tools and install
-  print_yellow "Installing Duo..." 
-  show_loading_animation 5
-  echo "----------------------------------"
-  
-  install_duo  # Call to the Duo installation function
-}
 
 install_duo() {
 
@@ -458,7 +481,7 @@ install_duo() {
   restart_ssh_service
 
   print_green "Duo installation completed."
-  main_menu
+  # main_menu
 }
 
 
@@ -497,7 +520,7 @@ restart_ssh_service() {
 
 # Function to uninstall Duo
 uninstall_duo() {
-  if [ ! -d "/etc/duo" ]; then
+  if [ ! -d "/etc/duo" ] && [ ! -f "/etc/login_duo.conf" ]; then
     show_loading_animation 3
     print_yellow "Duo is already uninstalled."
   else
@@ -506,20 +529,55 @@ uninstall_duo() {
 
     # Remove Duo files
     show_progress_bar 1
-    sudo rm -rf /etc/duo/login_duo.conf
-    print_green "Removed login_duo.conf"
+
+    # Check and remove /etc/duo/login_duo.conf if it exists
+    if [ -f "/etc/duo/login_duo.conf" ]; then
+      sudo rm -rf /etc/duo/login_duo.conf
+      print_green "Removed /etc/duo/login_duo.conf"
+    else
+      print_yellow "/etc/duo/login_duo.conf not found, skipping."
+    fi
+
+    # Check and remove /etc/login_duo.conf if it exists
+    if [ -f "/etc/login_duo.conf" ]; then
+      sudo rm -rf /etc/login_duo.conf
+      print_green "Removed /etc/login_duo.conf"
+    else
+      print_yellow "/etc/login_duo.conf not found, skipping."
+    fi
+
     show_progress_bar 1
-    sudo rm -rf /usr/sbin/login_duo
-    print_green "Removed login_duo"
+
+    # Remove the login_duo binary if it exists
+    if [ -f "/usr/sbin/login_duo" ]; then
+      sudo rm -rf /usr/sbin/login_duo
+      print_green "Removed /usr/sbin/login_duo"
+    else
+      print_yellow "/usr/sbin/login_duo not found, skipping."
+    fi
+
     show_progress_bar 1
-    sudo rm -rf /usr/lib/libduo.*
-    print_green "Removed libduo.*"
+
+    # Remove libduo.* files if they exist
+    if ls /usr/lib/libduo.* 1> /dev/null 2>&1; then
+      sudo rm -rf /usr/lib/libduo.*
+      print_green "Removed libduo.*"
+    else
+      print_yellow "libduo.* not found, skipping."
+    fi
+
     show_progress_bar 1
-    sudo rmdir /etc/duo
-    print_green "Removed dir duo"
-    
+
+    # Remove /etc/duo directory if it exists and is empty
+    if [ -d "/etc/duo" ]; then
+      sudo rmdir /etc/duo
+      print_green "Removed /etc/duo directory"
+    else
+      print_yellow "/etc/duo directory not found or not empty, skipping."
+    fi
+
     show_progress_bar 3
-    
+
     # Edit SSH configuration to remove Duo settings
     echo "Editing SSH configuration..."
     cd /etc/ssh
@@ -531,11 +589,12 @@ uninstall_duo() {
 
     # Restart SSH service using the restart_ssh_service function
     restart_ssh_service
-    
+
     print_green "Duo uninstallation completed."
   fi
-  main_menu
+  # main_menu
 }
+
 
 
 # Function to delete this script
@@ -545,50 +604,84 @@ self_delete() {
     exec rm -- "$0"
 }
 
-# Function to display the main menu
+# Function to check for root permission
+check_root_permission() {
+  if [ "$EUID" -ne 0 ]; then
+    print_red ""-------------------------------""
+    print_red "This script must be run as root."
+    print_red ""-------------------------------""
+    echo ""
+    exit 1
+  fi
+}
+
+# Function to display the main menu with borders, clear only once initially
 main_menu() {
-    echo "--------------------------------------------"
-    echo "Select an option:"
-    echo "1) Install Duo"
-    echo "2) Uninstall Duo"
-    echo "3) Check OS Version"
-    echo "4) Check Tools"
-    echo "5) Check passwd"
-    echo "6) Delete Script"
+    clear  # Always clear the screen before showing the menu
+    
+    echo        "┌──────────────────────────────────────────────────────────────────────┐"
+    print_green "│                         DUO INSTALLER MENU V1.0                      │"
+    echo        "├──────────────────────────────────────────────────────────────────────┤"
+    echo        "│ Select an option:                                                    │"
+    echo        "│                                                                      │"
+    echo        "│ 1) Install Duo                                                       │"
+    echo        "│ 2) Uninstall Duo                                                     │"
+    echo        "│ 3) Check OS Version                                                  │"
+    echo        "│ 4) Check Tools                                                       │"
+    echo        "│ 5) Check passwd                                                      │"
+    echo        "│ 6) Delete Script                                                     │"
+    echo        "│                                                                      │"
+    echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
-    echo "--------------------------------------------"
+    echo ""
 
     case $CHOICE in
         1)
             check_internet_install_duo
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         2)
             uninstall_duo
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         3)
-            check_os_version 
+            check_os_version
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         4)
             check_tools
+            echo ""
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         5)
             echo "--------------------------------------------"
             echo ""
             cut -d: -f1 /etc/passwd
             echo ""
-            main_menu
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         6)
-            self_delete 
+            self_delete
             ;;
         *)
             print_red "Invalid choice, please try again."
-            main_menu
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
     esac
 }
 
+check_root_permission
 main_menu
+
+
+
+
 
 #=============================================
 
