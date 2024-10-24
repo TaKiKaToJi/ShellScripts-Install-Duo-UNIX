@@ -106,7 +106,7 @@ check_os_version() {
   print_green "Hostname: $HOSTNAME"
   print_green "IP Address: $IP_ADDRESS"
 
-  # main_menu
+  # main_menu d
 }
 
 
