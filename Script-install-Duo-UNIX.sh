@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Display colored and large text
-  echo -e "\e[38;2;0;255;0m\e[1m
-DUO INSTALLER TOOLS
-\e[0m"
+#   echo -e "\e[38;2;0;255;0m\e[1m
+# DUO INSTALLER TOOLS
+# \e[0m"
 
 # Function to print messages in red
 print_red() {
