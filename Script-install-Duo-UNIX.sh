@@ -233,7 +233,7 @@ run_install_duo() {
   # Skip Duo installation if any tools were missing and installed
   if [ "$INSTALLATION_OCCURRED" = true ]; then
     print_yellow "Some Tools were missing. Skipping Duo installation for now."
-    main_menu  # Return to main menu after checking tools
+   # main_menu  # Return to main menu after checking tools
   else
     print_yellow "Installing Duo..."
     show_loading_animation 5
@@ -361,7 +361,7 @@ install_duo() {
   wget --content-disposition "https://dl.duosecurity.com/duo_unix-latest.tar.gz" -O "$DUO_ARCHIVE"
   if [ $? -ne 0 ]; then
     print_red "Failed to download Duo Unix. Exiting..."
-    main_menu
+   # main_menu
   fi
 
   # Extract Duo Unix
@@ -369,14 +369,14 @@ install_duo() {
   tar -xzvf "$DUO_ARCHIVE"
   if [ $? -ne 0 ]; then
     print_red "Failed to extract $DUO_ARCHIVE"
-    main_menu
+   # main_menu
   fi
 
   # Determine the extracted directory name
   DUO_DIR=$(tar -tzf "$DUO_ARCHIVE" | head -1 | cut -f1 -d"/")
   if [ -z "$DUO_DIR" ]; then
     print_red "Failed to determine Duo Unix directory. Exiting..."
-    main_menu
+   # main_menu
   fi
 
   # Change directory to Duo Unix source directory
@@ -384,7 +384,7 @@ install_duo() {
   cd "$DUO_DIR"
   if [ $? -ne 0 ]; then
     print_red "Cannot change to directory $DUO_DIR"
-    main_menu
+   # main_menu
   fi
 
   # Check if login_duo.conf already exists
@@ -417,7 +417,7 @@ install_duo() {
     ./configure --prefix=/usr && make && sudo make install
     if [ $? -ne 0 ]; then
       print_red "Error during Duo Unix installation"
-      main_menu
+     # main_menu
     else
       print_green "Duo Unix installed successfully."
     fi
@@ -440,7 +440,7 @@ install_duo() {
       fi
     else
       print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
-      main_menu
+     # main_menu
     fi
   fi
 
@@ -509,7 +509,7 @@ restart_ssh_service() {
       return
     else
       print_red "Error restarting SSH service. Please check the service status."
-      main_menu
+     # main_menu
     fi
   else
     print_red "Unsupported OS for SSH service restart."
