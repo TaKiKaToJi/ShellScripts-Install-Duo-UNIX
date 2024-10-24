@@ -480,7 +480,7 @@ install_duo() {
   # Restart SSH service after configuration
   restart_ssh_service
 
-  print_green "Duo installation completed."
+  # print_green "Duo installation completed."
   # main_menu
 }
 
@@ -493,29 +493,29 @@ restart_ssh_service() {
   print_yellow "Restarting SSH service..."
   show_loading_animation 1
 
-  # Detect OS before attempting to restart the SSH service
-  detect_os
+  # Function to handle successful restarts
+  ssh_restart_success() {
+    print_green "SSH service restarted successfully using $1."
+    print_green "Duo installation completed."
+  }
 
-  # Attempt to restart SSH service based on OS type
-  if [[ "$OS" == "Debian-Based" || "$OS" == "Red Hat-Based" ]]; then
-    if sudo systemctl restart sshd; then
-      print_green "SSH service restarted successfully using systemctl."
-      return
-    elif sudo service ssh restart; then
-      print_green "SSH service restarted successfully using service ssh."
-      return
-    elif sudo service sshd restart; then
-      print_green "SSH service restarted successfully using service sshd."
-      return
-    else
-      print_red "Error restarting SSH service. Please check the service status."
-     # main_menu
-    fi
+  # Attempt to restart SSH service using different methods
+  if sudo systemctl restart sshd 2>/dev/null; then
+    ssh_restart_success "systemctl"
+    return
+  elif sudo service ssh restart 2>/dev/null; then
+    ssh_restart_success "service ssh"
+    return
+  elif sudo service sshd restart 2>/dev/null; then
+    ssh_restart_success "service sshd"
+    return
   else
-    print_red "Unsupported OS for SSH service restart."
-    # main_menu
+    print_yellow "Cannot restarting the SSH service."
+    print_red "Failed to restart SSH service. Please check the service Secure Shell status"
   fi
 }
+
+
 
 
 # Function to uninstall Duo
