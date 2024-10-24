@@ -417,7 +417,7 @@ install_duo() {
     ./configure --prefix=/usr && make && sudo make install
     if [ $? -ne 0 ]; then
       print_red "Error during Duo Unix installation"
-      main_menu
+    #  main_menu
     else
       print_green "Duo Unix installed successfully."
     fi
@@ -440,7 +440,7 @@ install_duo() {
       fi
     else
       print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
-      main_menu
+     # main_menu
     fi
   fi
 
