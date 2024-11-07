@@ -75,15 +75,6 @@ check_os_version() {
   # Determine the OS
   detect_os
 
-  # Retrieve OS version based on OS type
-  if [ "$OS" == "Debian-Based" ]; then
-    OS_VERSION=$(lsb_release -a 2>/dev/null || cat /etc/os-release)
-  elif [ "$OS" == "Red Hat-Based" ]; then
-    OS_VERSION=$(cat /etc/redhat-release)
-  else
-    OS_VERSION="Unsupported OS"
-  fi
-
   # Retrieve kernel version
   KERNEL_VERSION=$(uname -r)
 
@@ -358,7 +349,7 @@ install_duo() {
   # Download Duo Unix
   DUO_ARCHIVE="duo_unix-latest.tar.gz"
   echo "Downloading Duo Unix..."
-  wget --content-disposition "https://dl.duosecurity.com/duo_unix-latest.tar.gz" -O "$DUO_ARCHIVE"
+  wget --content-disposition "https://dl.duosecurity.com/duo_unix-2.0.3.tar.gz" -O "$DUO_ARCHIVE"
   if [ $? -ne 0 ]; then
     print_red "Failed to download Duo Unix. Exiting..."
    # main_menu
@@ -485,8 +476,6 @@ install_duo() {
 }
 
 
-
-
 # Restart SSH service
 restart_ssh_service() {
   echo "--------------------------------------------"
@@ -597,13 +586,6 @@ uninstall_duo() {
 
 
 
-# Function to delete this script
-self_delete() {
-    print_green "Deleting this script..."
-    trap 'rm -- "$0"' EXIT
-    exec rm -- "$0"
-}
-
 # Function to check for root permission
 check_root_permission() {
   if [ "$EUID" -ne 0 ]; then
@@ -628,8 +610,8 @@ main_menu() {
     echo        "│ 2) Uninstall Duo                                                     │"
     echo        "│ 3) Check OS Version                                                  │"
     echo        "│ 4) Check Tools                                                       │"
-    echo        "│ 5) Check passwd                                                      │"
-    echo        "│ 6) Delete Script                                                     │"
+    echo        "│ 5) Check Users List                                                  │"
+    echo        "│ 6) Settings                                                          │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
@@ -666,7 +648,7 @@ main_menu() {
             main_menu  # Clear and return to menu
             ;;
         6)
-            self_delete
+            settings
             ;;
         *)
             print_red "Invalid choice, please try again."
