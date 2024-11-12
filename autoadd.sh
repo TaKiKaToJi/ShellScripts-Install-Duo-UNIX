@@ -3,12 +3,12 @@
 # Variables
 SSHD_CONFIG="/etc/ssh/sshd_config"
 DUO_CONFIG_LINES=(
-    " "
+    
     "#Duo 2FA login"
     "ForceCommand /usr/sbin/login_duo"
     "PermitTunnel no"
     "AllowTcpForwarding no"
-    " "
+
 )
 
 # Backup sshd_config before modifying

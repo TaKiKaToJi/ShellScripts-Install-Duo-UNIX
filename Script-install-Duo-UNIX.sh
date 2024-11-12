@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# Display colored and large text
-#   echo -e "\e[38;2;0;255;0m\e[1m
-# DUO INSTALLER TOOLS
-# \e[0m"
 
 # Function to print messages in red
 print_red() {
@@ -67,37 +63,31 @@ show_loading_animation() {
 # Call the function with the duration you want the animation to run (e.g., 5 seconds)
 # show_loading_animation 5
 
-
-# Function to check OS version, kernel, hostname, and IP address
+# Function to detect OS
+# Function to check OS version, hostname, and IP address
 check_os_version() {
-  echo "Checking OS version, kernel, hostname, and IP address..."
+  echo "Checking OS version, hostname, and IP address"
 
-  # Determine the OS
-  detect_os
-
-  # Retrieve kernel version
-  KERNEL_VERSION=$(uname -r)
-
-  # Check if hostname command is available and get hostname
-  if command -v hostname &> /dev/null; then
-    HOSTNAME=$(hostname)
+  # Check for OS version
+  if [ -f /etc/os-release ]; then
+    # Source the file to get OS information
+    . /etc/os-release
+    OS_INFO="$ID $VERSION_ID"
   else
-    HOSTNAME="Hostname command not found"
+    OS_INFO="Unable to detect OS: /etc/os-release not found."
   fi
+
+  # Retrieve the hostname
+  HOSTNAME=$(hostname 2>/dev/null || echo "Hostname command not found")
 
   # Retrieve IP address
   IP_ADDRESS=$(hostname -I | awk '{print $1}')
-  if [ -z "$IP_ADDRESS" ]; then
-    IP_ADDRESS="IP Address not found"
-  fi
+  [ -z "$IP_ADDRESS" ] && IP_ADDRESS="IP Address not found"
 
-  # Display results
-  print_green "OS version: $OS_VERSION"
-  print_green "Kernel version: $KERNEL_VERSION"
+  # Display the results
+  print_green "OS version: $OS_INFO"
   print_green "Hostname: $HOSTNAME"
   print_green "IP Address: $IP_ADDRESS"
-
-  # main_menu d
 }
 
 
@@ -188,9 +178,9 @@ check_tools_and_install() {
 
   # Define tool lists based on detected OS
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar" )
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar" )
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -271,7 +261,6 @@ show_loading_animation 3  # Wait before proceeding
   # main_menu  # Return to main menu after checking tools
 }
 
-
 check_internet_install_duo() {
     echo "Checking internet connection..."
 
@@ -343,28 +332,107 @@ check_internet_install_duo() {
     done
 }
 
+#======================================================================
+#menu Settings
+
+# Global variable to store the selected version
+SELECTED_VERSION="duo_unix-2.0.3.tar.gz"
+
+# Function to fetch and display release notes from GitHub
+fetch_release_notes() {
+    local VERSION_TAG=$1
+    local USER="duosecurity"
+    local REPO="duo_unix"
+    local API_URL="https://api.github.com/repos/$USER/$REPO/releases/tags/$VERSION_TAG"
+
+    echo "Fetching release notes for $VERSION_TAG..."
+
+    # Fetch release notes with curl, checking for network and API errors
+    HTTP_RESPONSE=$(curl -s -w "%{http_code}" -o response.json "$API_URL")
+
+    if [ "$HTTP_RESPONSE" -ne 200 ]; then
+        echo "Error: Failed to fetch release notes (HTTP Status: $HTTP_RESPONSE)."
+        rm -f response.json
+        return
+    fi
+
+    # Extract release notes from the JSON response
+    RELEASE_NOTES=$(grep -oP '"body":\s*"\K[^"]+' response.json)
+
+    # Check if release notes are empty or null
+    if [ -z "$RELEASE_NOTES" ]; then
+        echo "No release notes found for $VERSION_TAG."
+    else
+        print_green "Release Notes for $VERSION_TAG:"
+        echo "--------------------------------------------"
+        echo ""
+        print_green "$RELEASE_NOTES"
+        echo ""
+        echo "--------------------------------------------"
+    fi
+
+    # Clean up the temporary file
+    rm -f response.json
+}
+
+
+
+# Function for the settings menu
+settings() {
+    echo "Settings Menu - Choose a Duo Unix version to download:"
+    echo "1) Duo unix latest"
+    echo "2) Duo unix 2.0.4"
+    echo "3) Duo unix 2.0.3 (Default)"
+    echo "4) Duo unix 2.0.2"
+    echo "5) Duo unix 2.0.1"
+    echo "6) Duo unix 2.0.0"
+    echo "0) Return to main menu"
+    read -p "Choose a version (1-6): " CHOICE
+
+    case $CHOICE in
+        1) SELECTED_VERSION="duo_unix-latest.tar.gz";;
+        2) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; fetch_release_notes "duo_unix-2.0.4";;
+        3) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; fetch_release_notes "duo_unix-2.0.3";;
+        4) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; fetch_release_notes "duo_unix-2.0.2";;
+        5) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; fetch_release_notes "duo_unix-2.0.1";;
+        6) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; fetch_release_notes "duo_unix-2.0.0";;
+        0) main_menu; return;;
+        *) echo "Invalid choice. Returning to settings..."; read -p "Press Enter to return to the menu..."; settings;;
+    esac
+
+    # Ask for confirmation to save the selected version
+        read -p "Save this version as default (Y/n)? " CONFIRMATION
+    if [[ "$CONFIRMATION" =~ ^[Yy]$ || -z "$CONFIRMATION" ]]; then
+        print_green "Version $SELECTED_VERSION saved as default."
+    else
+        print_red "Version not saved. Returning to settings..."
+        read -p "Press Enter to return to the menu..."
+        main_menu
+    fi
+
+}
+
+#======================================================================
+#menu Settings
 
 install_duo() {
 
-  # Download Duo Unix
-  DUO_ARCHIVE="duo_unix-latest.tar.gz"
-  echo "Downloading Duo Unix..."
-  wget --content-disposition "https://dl.duosecurity.com/duo_unix-2.0.3.tar.gz" -O "$DUO_ARCHIVE"
-  if [ $? -ne 0 ]; then
-    print_red "Failed to download Duo Unix. Exiting..."
-   # main_menu
-  fi
+    echo "Downloading Duo Unix version $SELECTED_VERSION..."
+    wget --content-disposition "https://dl.duosecurity.com/$SELECTED_VERSION" -O "$SELECTED_VERSION"
+    if [ $? -ne 0 ]; then
+        print_red "Failed to download Duo Unix. Exiting..."
+    fi
 
   # Extract Duo Unix
   echo "Extracting Duo Unix..."
-  tar -xzvf "$DUO_ARCHIVE"
+  tar -xzvf "$SELECTED_VERSION"
   if [ $? -ne 0 ]; then
-    print_red "Failed to extract $DUO_ARCHIVE"
+    print_red "Failed to extract $SELECTED_VERSION"
    # main_menu
   fi
 
   # Determine the extracted directory name
-  DUO_DIR=$(tar -tzf "$DUO_ARCHIVE" | head -1 | cut -f1 -d"/")
+  DUO_DIR=$(tar -tzf "$SELECTED_VERSION" | head -1 | cut -f1 -d"/")
   if [ -z "$DUO_DIR" ]; then
     print_red "Failed to determine Duo Unix directory. Exiting..."
    # main_menu
@@ -468,6 +536,7 @@ install_duo() {
     vi sshd_config
   fi
 
+  clear
   # Restart SSH service after configuration
   restart_ssh_service
 
@@ -503,8 +572,6 @@ restart_ssh_service() {
     print_red "Failed to restart SSH service. Please check the service Secure Shell status"
   fi
 }
-
-
 
 
 # Function to uninstall Duo
@@ -559,7 +626,7 @@ uninstall_duo() {
 
     # Remove /etc/duo directory if it exists and is empty
     if [ -d "/etc/duo" ]; then
-      sudo rmdir /etc/duo
+      sudo rm -rf /etc/duo
       print_green "Removed /etc/duo directory"
     else
       print_yellow "/etc/duo directory not found or not empty, skipping."
@@ -586,6 +653,7 @@ uninstall_duo() {
 
 
 
+
 # Function to check for root permission
 check_root_permission() {
   if [ "$EUID" -ne 0 ]; then
@@ -602,7 +670,7 @@ main_menu() {
     clear  # Always clear the screen before showing the menu
     
     echo        "┌──────────────────────────────────────────────────────────────────────┐"
-    print_green "│                         DUO INSTALLER MENU V1.0                      │"
+    print_green "│                        DUO INSTALLER MENU V1.1                       │"
     echo        "├──────────────────────────────────────────────────────────────────────┤"
     echo        "│ Select an option:                                                    │"
     echo        "│                                                                      │"
@@ -611,7 +679,7 @@ main_menu() {
     echo        "│ 3) Check OS Version                                                  │"
     echo        "│ 4) Check Tools                                                       │"
     echo        "│ 5) Check Users List                                                  │"
-    echo        "│ 6) Settings                                                          │"
+    echo        "│ 6) Settings Duo Version                                              │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
@@ -649,6 +717,8 @@ main_menu() {
             ;;
         6)
             settings
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
             ;;
         *)
             print_red "Invalid choice, please try again."
