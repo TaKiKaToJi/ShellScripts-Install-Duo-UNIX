@@ -63,6 +63,222 @@ show_loading_animation() {
 # Call the function with the duration you want the animation to run (e.g., 5 seconds)
 # show_loading_animation 5
 
+
+check_internet_install_duo_pam() {
+    echo "Checking internet connection..."
+
+    # Check 1: Internet connectivity test using ping and port checks
+    echo "Check 1: Testing internet connectivity with ping..."
+    if ping -c 1 www.google.com > /dev/null 2>&1; then
+        echo "Check 1 passed: Internet is connected (via ping)."
+
+        # Check if ports 80 and 443 are reachable
+        echo "Checking connectivity to port 80..."
+        if nc -z -w 5 www.google.com 80 > /dev/null 2>&1; then
+            echo "Port 80 is reachable."
+        else
+            echo -e "\033[0;31mPort 80 is not reachable\033[0m"
+        fi
+
+        echo "Checking connectivity to port 443..."
+        if nc -z -w 5 www.google.com 443 > /dev/null 2>&1; then
+            echo "Port 443 is reachable."
+        else
+            echo -e "\033[0;31mPort 443 is not reachable\033[0m"
+        fi
+
+        check_os_version_pam_install
+        return
+    else
+        echo -e "\033[0;31mCheck 1 failed: Internet connectivity unsuccessful (via ping)\033[0m"
+    fi
+
+    # Check 2: Using curl to fetch Google
+    echo "Check 2: Testing with curl to Google..."
+    if curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null; then
+        echo "Check 2 passed: Internet is connected (via curl)."
+        check_os_version_pam_install
+        return
+    else
+        echo -e "\033[0;31mCheck 2 failed: Unable to connect via curl\033[0m"
+    fi
+
+    # Check 3: Using wget to download headers from Google
+    echo "Check 3: Testing with wget to Google..."
+    if wget --spider -q http://www.google.com; then
+        echo "Check 3 passed: Internet is connected (via wget)."
+        check_os_version_pam_install
+        return
+    else
+        echo -e "\033[0;31mCheck 3 failed: Unable to connect via wget\033[0m"
+    fi
+
+    # If all checks failed, prompt to bypass
+    echo -e "\033[0;31mAll internet checks failed.\033[0m"
+    while true; do
+        read -p "Do you want to bypass the internet check and continue? (Y/n): " choice
+        case "$choice" in
+            [Yy]* )
+                echo "Bypassing internet check and proceeding with installation..."
+                check_os_version_pam_install
+                return
+                ;;
+            [Nn]* )
+                echo "Exiting to main menu. Please check your internet connection."
+                main_menu
+                return
+                ;;
+            * )
+                echo "Please answer Y (yes) or N (no)."
+                ;;
+        esac
+    done
+}
+
+# Check OS version
+check_os_version_pam_install() {
+    echo "Checking OS version, hostname, and IP address"
+
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_INFO="$ID $VERSION_ID"
+    else
+        OS_INFO="Unable to detect OS: /etc/os-release not found."
+    fi
+
+    HOSTNAME=$(hostname 2>/dev/null || echo "Hostname command not found")
+    IP_ADDRESS=$(hostname -I | awk '{print $1}')
+    [ -z "$IP_ADDRESS" ] && IP_ADDRESS="IP Address not found"
+
+    print_green "OS version: $OS_INFO"
+    print_green "Hostname: $HOSTNAME"
+    print_green "IP Address: $IP_ADDRESS"
+
+    # Adjust case for supported OS names
+    case "$ID" in
+        centos)
+            OS_NAME="CentOS"
+            ;;
+        fedora)
+            OS_NAME="Fedora"
+            ;;
+        centosstream)
+            OS_NAME="CentOSStream"
+            ;;
+        rhel)
+            OS_NAME="RedHatEnterprise"
+            ;;
+        *)
+            print_red "Not supported yet: $ID"
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
+            ;;
+    esac
+
+    create_duo_repo "$OS_NAME"
+}
+
+# Create duosecurity.repo for yum-based systems
+create_duo_repo() {
+    local os="$1"
+    echo "Creating /etc/yum.repos.d/duosecurity.repo for Duo installation..."
+    cat <<EOF >/etc/yum.repos.d/duosecurity.repo
+[duosecurity]
+name=Duo Security Repository
+baseurl=http://pkg.duosecurity.com/${os}/\$releasever/\$basearch
+enabled=1
+gpgcheck=0
+EOF
+
+    install_duo_unix_pam
+}
+
+# Install Duo Unix package
+install_duo_unix_pam() {
+    print_green "Importing Duo GPG key and installing duo_unix..."
+    rpm --import https://duo.com/DUO-GPG-PUBLIC-KEY.asc
+    yum install duo_unix -y
+
+    configure_duo_unix_pam
+}
+
+# Configure pam_duo.conf using nano
+configure_duo_unix_pam() {
+    echo "Configuring Duo Unix..."
+    
+    # Check for pam_duo.conf and edit using nano
+    if [ -f /etc/duo/pam_duo.conf ]; then
+        nano /etc/duo/pam_duo.conf
+    elif [ -f /etc/pam_duo.conf ]; then
+        nano /etc/pam_duo.conf
+    else
+        print_red "Error: pam_duo.conf file not found in /etc/duo or /etc."
+        exit 1
+    fi
+
+    # Show Duo PAM configuration for SSH
+    show_duo_pam_config
+
+    # Edit SSH configuration
+    echo "Editing SSH configuration..."
+    cd /etc/ssh
+    if [ -x "$(command -v nano)" ]; then
+        nano sshd_config
+    else
+        vi sshd_config
+    fi
+
+    # Clear the screen after editing
+    clear
+
+    show_duo_pam_sshd_config
+
+    # Edit SSHD PAM.D configuration
+    echo "Editing SSHD PAM configuration..."
+    cd /etc/pam.d
+    if [ -x "$(command -v nano)" ]; then
+        nano sshd
+    else
+        vi sshd
+    fi
+
+    clear
+
+    # Restart SSH service
+    restart_ssh_service
+}
+
+
+# Show Duo PAM configuration for SSH
+show_duo_pam_sshd_config() {
+    clear
+    echo ""
+    echo "--------------------------------------------"
+    echo ""
+    echo -e "\e[38;2;0;255;0m\e[1m auth       required     pam_duo.so\e[0m"
+    echo ""
+    echo "--------------------------------------------"
+    echo "Please manually update the sshd_config as needed."
+    read -p "Press Enter to continue..."
+    clear
+}
+
+# Show Duo PAM configuration for SSH
+show_duo_pam_config() {
+    clear
+    echo ""
+    echo "--------------------------------------------"
+    echo ""
+    echo -e "\e[38;2;0;255;0m\e[1m ChallengeResponseAuthentication yes\e[0m"
+    echo ""
+    echo "--------------------------------------------"
+    echo "Please manually update the sshd_config as needed."
+    read -p "Press Enter to continue..."
+    clear
+}
+
+
+
 # Function to detect OS
 # Function to check OS version, hostname, and IP address
 check_os_version() {
@@ -554,7 +770,6 @@ restart_ssh_service() {
   # Function to handle successful restarts
   ssh_restart_success() {
     print_green "SSH service restarted successfully using $1."
-    print_green "Duo installation completed."
   }
 
   # Attempt to restart SSH service using different methods
@@ -574,19 +789,67 @@ restart_ssh_service() {
 }
 
 
-# Function to uninstall Duo
+# # Function to check if Duo Unix is installed
+# check_Duo_pam() {
+#   detect_os  # Ensure OS is detected and set
+
+#   show_loading_animation 3  # Show loading animation for 3 seconds
+
+#   # Check if the OS is supported
+#   if [ "$OS" == "Red Hat-Based" ]; then
+#     # Use rpm to check for duo_unix on Red Hat-based systems
+#     if rpm -q duo_unix > /dev/null 2>&1; then
+#       print_green "Duo Unix is installed."
+#     else
+#       print_yellow "Duo Unix is not installed."
+#     fi
+#   elif [ "$OS" == "Debian-Based" ]; then
+#     # Use dpkg to check for duo_unix on Debian-based systems
+#     if dpkg -l | grep duo_unix > /dev/null 2>&1; then
+#       print_green "Duo Unix is installed."
+#     else
+#       print_yellow "Duo Unix is not installed."
+#     fi
+#   else
+#     print_red "Unsupported OS: $OS"
+#     exit 1
+#   fi
+# }
+
+
+
+
+
+
+
 uninstall_duo() {
-  if [ ! -d "/etc/duo" ] && [ ! -f "/etc/login_duo.conf" ]; then
+
+  # Check if Duo is installed before uninstalling
+  if ! rpm -q duo_unix > /dev/null 2>&1; then
     show_loading_animation 3
-    print_yellow "Duo is already uninstalled."
+    print_yellow "Duo Pam is already uninstalled."
   else
     show_loading_animation 3
-    print_yellow "Uninstalling Duo..."
+    print_yellow "Uninstalling Duo Pam..."
+
+    # Remove Duo package
+    sudo yum remove duo_unix -y
+    print_green "Duo Unix package removed."
+  fi
+
+  # Check if Duo files exist
+  if [ ! -d "/etc/duo" ] && [ ! -f "/etc/login_duo.conf" ] && [ ! -f "/usr/sbin/login_duo" ] && [ ! -f "/usr/lib/libduo.*" ] && [ ! -f "/etc/yum.repos.d/duosecurity.repo" ]; then
+    show_loading_animation 3
+    print_yellow "Duo files already removed."
+    # Skip editing SSH configuration if files are already removed
+    skip_ssh_config=true
+  else
+    show_loading_animation 3
+    print_yellow "Removing Duo files..."
 
     # Remove Duo files
     show_progress_bar 1
 
-    # Check and remove /etc/duo/login_duo.conf if it exists
     if [ -f "/etc/duo/login_duo.conf" ]; then
       sudo rm -rf /etc/duo/login_duo.conf
       print_green "Removed /etc/duo/login_duo.conf"
@@ -594,7 +857,6 @@ uninstall_duo() {
       print_yellow "/etc/duo/login_duo.conf not found, skipping."
     fi
 
-    # Check and remove /etc/login_duo.conf if it exists
     if [ -f "/etc/login_duo.conf" ]; then
       sudo rm -rf /etc/login_duo.conf
       print_green "Removed /etc/login_duo.conf"
@@ -603,8 +865,6 @@ uninstall_duo() {
     fi
 
     show_progress_bar 1
-
-    # Remove the login_duo binary if it exists
     if [ -f "/usr/sbin/login_duo" ]; then
       sudo rm -rf /usr/sbin/login_duo
       print_green "Removed /usr/sbin/login_duo"
@@ -613,8 +873,6 @@ uninstall_duo() {
     fi
 
     show_progress_bar 1
-
-    # Remove libduo.* files if they exist
     if ls /usr/lib/libduo.* 1> /dev/null 2>&1; then
       sudo rm -rf /usr/lib/libduo.*
       print_green "Removed libduo.*"
@@ -623,8 +881,14 @@ uninstall_duo() {
     fi
 
     show_progress_bar 1
+    if [ -f "/etc/yum.repos.d/duosecurity.repo" ]; then
+      sudo rm -rf /etc/yum.repos.d/duosecurity.repo
+      print_green "Removed duosecurity.repo"
+    else
+      print_yellow "duosecurity.repo not found, skipping."
+    fi
 
-    # Remove /etc/duo directory if it exists and is empty
+    show_progress_bar 1
     if [ -d "/etc/duo" ]; then
       sudo rm -rf /etc/duo
       print_green "Removed /etc/duo directory"
@@ -633,8 +897,10 @@ uninstall_duo() {
     fi
 
     show_progress_bar 3
+  fi
 
-    # Edit SSH configuration to remove Duo settings
+  # Only edit SSH configuration if Duo files were removed
+  if [ -z "$skip_ssh_config" ]; then
     echo "Editing SSH configuration..."
     cd /etc/ssh
     if [ -x "$(command -v nano)" ]; then
@@ -642,16 +908,97 @@ uninstall_duo() {
     else
       vi sshd_config
     fi
-
-    # Restart SSH service using the restart_ssh_service function
-    restart_ssh_service
-
-    print_green "Duo uninstallation completed."
   fi
-  # main_menu
+
+  # Restart SSH service using the restart_ssh_service function
+  restart_ssh_service
+
+  print_green "Duo uninstallation completed."
 }
 
 
+
+
+# #------------------------------------------------------------
+
+# # Function to uninstall Duo
+# uninstall_duo() {
+#   if [ ! -d "/etc/duo" ] && [ ! -f "/etc/login_duo.conf" ]; then
+#     show_loading_animation 3
+#     print_yellow "Duo is already uninstalled."
+#   else
+#     show_loading_animation 3
+#     print_yellow "Uninstalling Duo..."
+
+#     # Remove Duo files
+#     show_progress_bar 1
+
+#     # Check and remove /etc/duo/login_duo.conf if it exists
+#     if [ -f "/etc/duo/login_duo.conf" ]; then
+#       sudo rm -rf /etc/duo/login_duo.conf
+#       print_green "Removed /etc/duo/login_duo.conf"
+#     else
+#       print_yellow "/etc/duo/login_duo.conf not found, skipping."
+#     fi
+
+#     # Check and remove /etc/login_duo.conf if it exists
+#     if [ -f "/etc/login_duo.conf" ]; then
+#       sudo rm -rf /etc/login_duo.conf
+#       print_green "Removed /etc/login_duo.conf"
+#     else
+#       print_yellow "/etc/login_duo.conf not found, skipping."
+#     fi
+
+#     show_progress_bar 1
+
+#     # Remove the login_duo binary if it exists
+#     if [ -f "/usr/sbin/login_duo" ]; then
+#       sudo rm -rf /usr/sbin/login_duo
+#       print_green "Removed /usr/sbin/login_duo"
+#     else
+#       print_yellow "/usr/sbin/login_duo not found, skipping."
+#     fi
+
+#     show_progress_bar 1
+
+#     # Remove libduo.* files if they exist
+#     if ls /usr/lib/libduo.* 1> /dev/null 2>&1; then
+#       sudo rm -rf /usr/lib/libduo.*
+#       print_green "Removed libduo.*"
+#     else
+#       print_yellow "libduo.* not found, skipping."
+#     fi
+
+#     show_progress_bar 1
+
+#     # Remove /etc/duo directory if it exists and is empty
+#     if [ -d "/etc/duo" ]; then
+#       sudo rm -rf /etc/duo
+#       print_green "Removed /etc/duo directory"
+#     else
+#       print_yellow "/etc/duo directory not found or not empty, skipping."
+#     fi
+
+#     show_progress_bar 3
+
+#     # Edit SSH configuration to remove Duo settings
+#     echo "Editing SSH configuration..."
+#     cd /etc/ssh
+#     if [ -x "$(command -v nano)" ]; then
+#       nano sshd_config
+#     else
+#       vi sshd_config
+#     fi
+
+#     # Restart SSH service using the restart_ssh_service function
+#     restart_ssh_service
+
+#     print_green "Duo uninstallation completed."
+#   fi
+#   # main_menu
+# }
+
+# #------------------------------------------------------------
 
 
 # Function to check for root permission
@@ -670,7 +1017,7 @@ main_menu() {
     clear  # Always clear the screen before showing the menu
     
     echo        "┌──────────────────────────────────────────────────────────────────────┐"
-    print_green "│                        DUO INSTALLER MENU V1.1                       │"
+    print_green "│                        DUO INSTALLER MENU V1.2                       │"
     echo        "├──────────────────────────────────────────────────────────────────────┤"
     echo        "│ Select an option:                                                    │"
     echo        "│                                                                      │"
@@ -680,6 +1027,7 @@ main_menu() {
     echo        "│ 4) Check Tools                                                       │"
     echo        "│ 5) Check Users List                                                  │"
     echo        "│ 6) Settings Duo Version                                              │"
+    echo        "│ 7) Install Duo PAM                                                   │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
@@ -720,6 +1068,11 @@ main_menu() {
             read -p "Press Enter to return to the menu..."
             main_menu  # Clear and return to menu
             ;;
+        7)
+            check_internet_install_duo_pam
+            read -p "Press Enter to return to the menu..."
+            main_menu  # Clear and return to menu
+            ;;    
         *)
             print_red "Invalid choice, please try again."
             read -p "Press Enter to return to the menu..."
