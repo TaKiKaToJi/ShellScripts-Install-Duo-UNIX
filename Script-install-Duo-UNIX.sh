@@ -1027,7 +1027,7 @@ main_menu() {
     echo        "│ 4) Check Tools                                                       │"
     echo        "│ 5) Check Users List                                                  │"
     echo        "│ 6) Settings Duo Version                                              │"
-    echo        "│ 7) Install Duo PAM                                                   │"
+    echo        "│ 7) Install Duo PAM (Unstable)                                        │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
@@ -1069,6 +1069,8 @@ main_menu() {
             main_menu  # Clear and return to menu
             ;;
         7)
+            echo ""
+            read -p "Press Enter to return to the menu..."
             check_internet_install_duo_pam
             read -p "Press Enter to return to the menu..."
             main_menu  # Clear and return to menu
