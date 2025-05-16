@@ -910,21 +910,6 @@ uninstall_duo() {
     fi
   fi
   
- show_progress_bar 3
-  fi
-
-  # Only edit SSH configuration if Duo Pam was just uninstalled
-  if [ -z "$skip_ssh_config" ]; then
-    # Edit SSHD PAM.D configuration
-    echo "Editing SSHD PAM configuration..."
-    cd /etc/pam.d
-    if [ -x "$(command -v nano)" ]; then
-        nano sshd
-    else
-        vi sshd
-    fi
-    clear
-  fi
   
 
   # Restart SSH service using the restart_ssh_service function
