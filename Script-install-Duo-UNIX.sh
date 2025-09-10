@@ -394,9 +394,9 @@ check_tools_and_install() {
 
   # Define tool lists based on detected OS
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar" )
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar" "coreutils" "util-linux")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar" )
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar" "coreutils" "util-linux")
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -404,12 +404,25 @@ check_tools_and_install() {
 
   ALL_INSTALLED=true
   INSTALLATION_OCCURRED=false  # Flag to track if any installation occurred
+  OK_COUNT=0
+  MISSING_COUNT=0
+  TOOL_STATUS_LINES=()
+
+  echo ""
+  echo "┌───────────────────────────────────┐"
+  print_green "│     Checking required tools       │"
+  echo "└───────────────────────────────────┘"
 
   for TOOL in "${TOOLS[@]}"; do
     check_install_package "$TOOL"
     if [ $? -ne 0 ]; then
       ALL_INSTALLED=false
       INSTALLATION_OCCURRED=true  # Mark that something has been installed or attempted
+      MISSING_COUNT=$((MISSING_COUNT+1))
+      TOOL_STATUS_LINES+=("$TOOL\tMISSING")
+    else
+      OK_COUNT=$((OK_COUNT+1))
+      TOOL_STATUS_LINES+=("$TOOL\tOK")
     fi
   done
 
@@ -417,6 +430,26 @@ check_tools_and_install() {
     print_green "All tools are already installed."
   elif [ "$INSTALLATION_OCCURRED" = true ]; then
     print_yellow "Some tools were missing."
+  fi
+
+  echo "--------------------------------------------"
+  if [ ${#TOOL_STATUS_LINES[@]} -gt 0 ]; then
+    if command -v column >/dev/null 2>&1; then
+      printf "%b\n" "Tool\tStatus" | column -t
+      printf "%b\n" "----\t------" | column -t
+      printf "%b\n" "${TOOL_STATUS_LINES[@]}" | column -t
+    else
+      printf "%b\n" "Tool\tStatus"
+      printf "%b\n" "----\t------"
+      printf "%b\n" "${TOOL_STATUS_LINES[@]}"
+    fi
+    echo "--------------------------------------------"
+  fi
+  print_green "OK: $OK_COUNT"
+  if [ "$MISSING_COUNT" -gt 0 ]; then
+    print_yellow "Missing: $MISSING_COUNT"
+  else
+    print_green "Missing: $MISSING_COUNT"
   fi
 }
 
@@ -448,9 +481,9 @@ check_tools() {
 show_loading_animation 3  # Wait before proceeding
 
   if [ "$OS" == "Red Hat-Based" ]; then
-    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar")
+    TOOLS=("gcc" "openssl-devel" "wget" "make" "nano" "curl" "tar" "coreutils" "util-linux")
   elif [ "$OS" == "Debian-Based" ]; then
-    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar")
+    TOOLS=("build-essential" "libssl-dev" "wget" "make" "nano" "curl" "tar" "coreutils" "util-linux")
   else
     print_red "Unsupported OS: $OS"
     exit 1
@@ -458,12 +491,25 @@ show_loading_animation 3  # Wait before proceeding
 
   ALL_INSTALLED=true
   INSTALLATION_OCCURRED=false  # Flag to track if any installation occurred
+  OK_COUNT=0
+  MISSING_COUNT=0
+  TOOL_STATUS_LINES=()
+
+  echo ""
+  echo "┌───────────────────────────────────┐"
+  print_green "│     Checking required tools       │"
+  echo "└───────────────────────────────────┘"
 
   for TOOL in "${TOOLS[@]}"; do
     check_install_package "$TOOL"
     if [ $? -ne 0 ]; then
       ALL_INSTALLED=false
       INSTALLATION_OCCURRED=true  # Mark that something has been installed
+      MISSING_COUNT=$((MISSING_COUNT+1))
+      TOOL_STATUS_LINES+=("$TOOL\tMISSING")
+    else
+      OK_COUNT=$((OK_COUNT+1))
+      TOOL_STATUS_LINES+=("$TOOL\tOK")
     fi
   done
 
@@ -472,6 +518,26 @@ show_loading_animation 3  # Wait before proceeding
   elif [ "$INSTALLATION_OCCURRED" = true ]; then
   
     print_yellow "Some tools were missing"
+  fi
+
+  echo "--------------------------------------------"
+  if [ ${#TOOL_STATUS_LINES[@]} -gt 0 ]; then
+    if command -v column >/dev/null 2>&1; then
+      printf "%b\n" "Tool\tStatus" | column -t
+      printf "%b\n" "----\t------" | column -t
+      printf "%b\n" "${TOOL_STATUS_LINES[@]}" | column -t
+    else
+      printf "%b\n" "Tool\tStatus"
+      printf "%b\n" "----\t------"
+      printf "%b\n" "${TOOL_STATUS_LINES[@]}"
+    fi
+    echo "--------------------------------------------"
+  fi
+  print_green "OK: $OK_COUNT"
+  if [ "$MISSING_COUNT" -gt 0 ]; then
+    print_yellow "Missing: $MISSING_COUNT"
+  else
+    print_green "Missing: $MISSING_COUNT"
   fi
 
   # main_menu  # Return to main menu after checking tools
@@ -552,7 +618,72 @@ check_internet_install_duo() {
 #menu Settings
 
 # Global variable to store the selected version
-SELECTED_VERSION="duo_unix-2.0.3.tar.gz"
+SELECTED_VERSION="duo_unix-2.2.0.tar.gz"
+
+# Return expected sha256 checksum for known tarballs
+get_expected_checksum() {
+  local filename="$1"
+  case "$filename" in
+    duo_unix-2.2.0.tar.gz)
+      echo "a399b2014836b5ff98bbbb41f77114fe06641801d8b6b121eb3c82895276a666QQ"
+      ;;
+    duo_unix-2.1.0.tar.gz)
+      echo "42917ea997827789fb03e765eded0a7f0a50f8220922835931a7c43f3d83b629"
+      ;;
+    duo_unix-2.0.4.tar.gz)
+      echo "3fb2155f8472304476057f7d149520bf6259c7b29d764b62275d35ad3249c264"
+      ;;
+    duo_unix-2.0.3.tar.gz)
+      echo "3b4e262e613f03a8264b504b6753270cd4dea2a06490527fd0663dcc6c970de1"
+      ;;
+    duo_unix-2.0.2.tar.gz)
+      echo "ee1b9677bd527674ded5e7fc3a81e040a8d840a56913c93fa0d4fb6c0f8e251d"
+      ;;
+    duo_unix-2.0.1.tar.gz)
+      echo "3a2f123df3da192dc84e044e36deb43cbcb707d40809e0c3c88b0ffa20694269"
+      ;;
+    duo_unix-2.0.0.tar.gz)
+      echo "0f90f748974ac6fe6271c372a5fb2172fae71dd9360fe87c7351a79bcee5ce06"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+# Compute sha256 of a file using available tool (sha256sum or shasum)
+compute_sha256() {
+  local filepath="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$filepath" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$filepath" | awk '{print $1}'
+  else
+    echo ""
+  fi
+}
+
+# Prompt with Y/N and 5-second countdown auto-bypass to Yes
+prompt_bypass_with_timeout() {
+  local seconds=10
+  local answer=""
+  while [ $seconds -gt 0 ]; do
+    printf "\rChecksum verification failed. Continue anyway? (Y/n) Auto-continue in %ds: " "$seconds"
+    # Read a single character with 1-second timeout
+    read -t 1 -n 1 answer 2>/dev/null
+    if [ $? -eq 0 ]; then
+      echo ""
+      break
+    fi
+    seconds=$((seconds - 1))
+  done
+  echo ""
+  if [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
 
 # Function to fetch and display release notes from GitHub
 fetch_release_notes() {
@@ -596,22 +727,24 @@ fetch_release_notes() {
 # Function for the settings menu
 settings() {
     echo "Settings Menu - Choose a Duo Unix version to download:"
-    echo "1) Duo unix latest"
+    echo "1) Duo unix 2.2.0 (Default)"
     echo "2) Duo unix 2.0.4"
-    echo "3) Duo unix 2.0.3 (Default)"
+    echo "3) Duo unix 2.0.3"
     echo "4) Duo unix 2.0.2"
     echo "5) Duo unix 2.0.1"
     echo "6) Duo unix 2.0.0"
+    echo "99) Duo unix latest (duo_unix-latest.tar.gz)"
     echo "0) Return to main menu"
-    read -p "Choose a version (1-6): " CHOICE
+    read -p "Choose a version (1-6 or 99): " CHOICE
 
     case $CHOICE in
-        1) SELECTED_VERSION="duo_unix-latest.tar.gz";;
+        1) SELECTED_VERSION="duo_unix-2.2.0.tar.gz"; fetch_release_notes "duo_unix-2.2.0";;
         2) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; fetch_release_notes "duo_unix-2.0.4";;
         3) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; fetch_release_notes "duo_unix-2.0.3";;
         4) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; fetch_release_notes "duo_unix-2.0.2";;
         5) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; fetch_release_notes "duo_unix-2.0.1";;
         6) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; fetch_release_notes "duo_unix-2.0.0";;
+        99) SELECTED_VERSION="duo_unix-latest.tar.gz";;
         0) main_menu; return;;
         *) echo "Invalid choice. Returning to settings..."; read -p "Press Enter to return to the menu..."; settings;;
     esac
@@ -638,6 +771,40 @@ install_duo() {
     if [ $? -ne 0 ]; then
         print_red "Failed to download Duo Unix. Exiting..."
     fi
+
+  # Verify sha256 integrity if possible
+  EXPECTED_SHA=$(get_expected_checksum "$SELECTED_VERSION")
+  ACTUAL_SHA=""
+  if [ -z "$EXPECTED_SHA" ]; then
+    # Try remote .sha256 if available
+    if wget -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
+      EXPECTED_SHA=$(awk '{print $1}' "$SELECTED_VERSION.sha256" | head -n1)
+      rm -f "$SELECTED_VERSION.sha256"
+    fi
+  fi
+  ACTUAL_SHA=$(compute_sha256 "$SELECTED_VERSION")
+  if [ -z "$ACTUAL_SHA" ]; then
+    print_yellow "sha256 tool not found; skipping checksum verification."
+  else
+    if [ -n "$EXPECTED_SHA" ]; then
+      if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+        print_red "SHA256 mismatch for $SELECTED_VERSION"
+        echo "Expected: $EXPECTED_SHA"
+        echo "Actual  : $ACTUAL_SHA"
+        if ! prompt_bypass_with_timeout; then
+          print_red "Aborting installation due to checksum mismatch."
+          main_menu
+          return
+        else
+          print_yellow "Bypassing checksum failure and continuing..."
+        fi
+      else
+        print_green "SHA256 verified successfully."
+      fi
+    else
+      print_yellow "No expected SHA256 available; skipping verification."
+    fi
+  fi
 
   # Extract Duo Unix
   echo "Extracting Duo Unix..."
@@ -828,6 +995,7 @@ uninstall_duo() {
   if ! rpm -q duo_unix > /dev/null 2>&1; then
     show_loading_animation 3
     print_yellow "Duo Pam is already uninstalled."
+    DUO_ALREADY_UNINSTALLED=true
   else
     show_loading_animation 3
     print_yellow "Uninstalling Duo Pam..."
@@ -900,13 +1068,49 @@ uninstall_duo() {
   fi
 
   # Only edit SSH configuration if Duo files were removed
-  if [ -z "$skip_ssh_config" ]; then
-    echo "Editing SSH configuration..."
+  if [ "${DUO_ALREADY_UNINSTALLED:-false}" = "true" ]; then
+    echo "--------------------------------------------"
+    print_yellow "Manual cleanup suggested in SSH config. Remove this line if present:"
+    echo ""
+    print_green "In /etc/ssh/sshd_config remove (or set to 'no') this line:"
+    echo "ChallengeResponseAuthentication yes"
+    echo "--------------------------------------------"
+
+    # Edit SSH configuration only
+    echo "Editing SSH configuration (/etc/ssh/sshd_config)..."
     cd /etc/ssh
     if [ -x "$(command -v nano)" ]; then
       nano sshd_config
     else
       vi sshd_config
+    fi
+  elif [ -z "$skip_ssh_config" ]; then
+    echo "--------------------------------------------"
+    print_yellow "Manual cleanup required in SSH and PAM configs. Remove these lines if present:"
+    echo ""
+    print_green "In /etc/ssh/sshd_config remove (or set to 'no') this line:"
+    echo "ChallengeResponseAuthentication yes"
+    echo ""
+    print_green "In /etc/pam.d/sshd remove this line:"
+    echo "auth       required     pam_duo.so"
+    echo "--------------------------------------------"
+
+    # Edit SSH configuration
+    echo "Editing SSH configuration (/etc/ssh/sshd_config)..."
+    cd /etc/ssh
+    if [ -x "$(command -v nano)" ]; then
+      nano sshd_config
+    else
+      vi sshd_config
+    fi
+
+    # Edit PAM sshd configuration
+    echo "Editing PAM configuration (/etc/pam.d/sshd)..."
+    cd /etc/pam.d
+    if [ -x "$(command -v nano)" ]; then
+      nano sshd
+    else
+      vi sshd
     fi
   fi
   
@@ -1019,7 +1223,7 @@ main_menu() {
     clear  # Always clear the screen before showing the menu
     
     echo        "┌──────────────────────────────────────────────────────────────────────┐"
-    print_green "│                        DUO INSTALLER MENU V1.2                       │"
+    print_green "│                        DUO INSTALLER MENU V1.3                       |"
     echo        "├──────────────────────────────────────────────────────────────────────┤"
     echo        "│ Select an option:                                                    │"
     echo        "│                                                                      │"
@@ -1029,7 +1233,7 @@ main_menu() {
     echo        "│ 4) Check Tools                                                       │"
     echo        "│ 5) Check Users List                                                  │"
     echo        "│ 6) Settings Duo Version                                              │"
-    echo        "│ 7) Install Duo PAM (Unfinished)                                        │"
+    echo -e    "│ 7) Install Duo PAM \e[31m(Unfinished)\e[0m                                      │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
@@ -1060,7 +1264,18 @@ main_menu() {
         5)
             echo "--------------------------------------------"
             echo ""
-            cut -d: -f1 /etc/passwd
+            HUMAN_USERS=$(awk -F: '($1=="root" || $3>=1000) && $7 !~ /(nologin|false)/ {print $1}' /etc/passwd | sort)
+            COUNT=$(echo "$HUMAN_USERS" | grep -c .)
+            print_green "login users ($COUNT):"
+            if [ -n "$HUMAN_USERS" ]; then
+              if command -v column >/dev/null 2>&1; then
+                echo "$HUMAN_USERS" | nl -w2 -s'. ' | column
+              else
+                echo "$HUMAN_USERS" | nl -w2 -s'. '
+              fi
+            else
+              print_yellow "No human/login users found."
+            fi
             echo ""
             read -p "Press Enter to return to the menu..."
             main_menu  # Clear and return to menu
@@ -1072,11 +1287,20 @@ main_menu() {
             ;;
         7)
             echo ""
-            read -p "Press Enter to return to continue"
+            echo "--------------------------------------------"
+            print_red "Warning: Install Duo PAM is unfinished."
+            print_yellow "This process may modify PAM and SSH configurations."
+            print_yellow "Ensure you have console access and backups of /etc/pam.d and /etc/ssh."
+            echo "--------------------------------------------"
+            read -p "Press Enter to continue, or press 0 to abort and return to the main menu: " PAM_ACK
+            if [[ "$PAM_ACK" == "0" ]]; then
+                main_menu
+                return
+            fi
             check_internet_install_duo_pam
             read -p "Press Enter to return to the menu..."
             main_menu  # Clear and return to menu
-            ;;    
+            ;;
         *)
             print_red "Invalid choice, please try again."
             read -p "Press Enter to return to the menu..."
