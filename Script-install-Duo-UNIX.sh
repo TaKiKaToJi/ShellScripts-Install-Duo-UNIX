@@ -625,7 +625,7 @@ get_expected_checksum() {
   local filename="$1"
   case "$filename" in
     duo_unix-2.2.0.tar.gz)
-      echo "a399b2014836b5ff98bbbb41f77114fe06641801d8b6b121eb3c82895276a666QQ"
+      echo "a399b2014836b5ff98bbbb41f77114fe06641801d8b6b121eb3c82895276a666"
       ;;
     duo_unix-2.1.0.tar.gz)
       echo "42917ea997827789fb03e765eded0a7f0a50f8220922835931a7c43f3d83b629"
