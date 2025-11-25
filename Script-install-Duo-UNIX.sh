@@ -618,14 +618,20 @@ check_internet_install_duo() {
 #menu Settings
 
 # Global variable to store the selected version
-SELECTED_VERSION="duo_unix-2.2.0.tar.gz"
+SELECTED_VERSION="duo_unix-2.2.2.tar.gz"
 
 # Return expected sha256 checksum for known tarballs
 get_expected_checksum() {
   local filename="$1"
   case "$filename" in
+    duo_unix-2.2.2.tar.gz)
+      echo "99c3fdf33905c82fd681217db6abe48a6be2ae36aacc0735043c20a7defa2913"
+      ;;
+    duo_unix-2.2.1.tar.gz)
+      echo "e376be0585b3c3d113a588f19525e357cdee246d69aeb8e860cbf4fddbf900ca"
+      ;;
     duo_unix-2.2.0.tar.gz)
-      echo "a399b2014836b5ff98bbbb41f77114fe06641801d8b6b121eb3c82895276a666QQ"
+      echo "a399b2014836b5ff98bbbb41f77114fe06641801d8b6b121eb3c82895276a666"
       ;;
     duo_unix-2.1.0.tar.gz)
       echo "42917ea997827789fb03e765eded0a7f0a50f8220922835931a7c43f3d83b629"
@@ -727,23 +733,27 @@ fetch_release_notes() {
 # Function for the settings menu
 settings() {
     echo "Settings Menu - Choose a Duo Unix version to download:"
-    echo "1) Duo unix 2.2.0 (Default)"
-    echo "2) Duo unix 2.0.4"
-    echo "3) Duo unix 2.0.3"
-    echo "4) Duo unix 2.0.2"
-    echo "5) Duo unix 2.0.1"
-    echo "6) Duo unix 2.0.0"
+    echo "1) Duo unix 2.2.2 (Default)"
+    echo "2) Duo unix 2.2.1"
+    echo "3) Duo unix 2.2.0"
+    echo "4) Duo unix 2.0.4"
+    echo "5) Duo unix 2.0.3"
+    echo "6) Duo unix 2.0.2"
+    echo "7) Duo unix 2.0.1"
+    echo "8) Duo unix 2.0.0"
     echo "99) Duo unix latest (duo_unix-latest.tar.gz)"
     echo "0) Return to main menu"
-    read -p "Choose a version (1-6 or 99): " CHOICE
+    read -p "Choose a version (1-8 or 99): " CHOICE
 
     case $CHOICE in
-        1) SELECTED_VERSION="duo_unix-2.2.0.tar.gz"; fetch_release_notes "duo_unix-2.2.0";;
-        2) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; fetch_release_notes "duo_unix-2.0.4";;
-        3) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; fetch_release_notes "duo_unix-2.0.3";;
-        4) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; fetch_release_notes "duo_unix-2.0.2";;
-        5) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; fetch_release_notes "duo_unix-2.0.1";;
-        6) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; fetch_release_notes "duo_unix-2.0.0";;
+        1) SELECTED_VERSION="duo_unix-2.2.2.tar.gz"; fetch_release_notes "duo_unix-2.2.2";;
+        2) SELECTED_VERSION="duo_unix-2.2.1.tar.gz"; fetch_release_notes "duo_unix-2.2.1";;
+        3) SELECTED_VERSION="duo_unix-2.2.0.tar.gz"; fetch_release_notes "duo_unix-2.2.0";;
+        4) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; fetch_release_notes "duo_unix-2.0.4";;
+        5) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; fetch_release_notes "duo_unix-2.0.3";;
+        6) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; fetch_release_notes "duo_unix-2.0.2";;
+        7) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; fetch_release_notes "duo_unix-2.0.1";;
+        8) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; fetch_release_notes "duo_unix-2.0.0";;
         99) SELECTED_VERSION="duo_unix-latest.tar.gz";;
         0) main_menu; return;;
         *) echo "Invalid choice. Returning to settings..."; read -p "Press Enter to return to the menu..."; settings;;
@@ -1218,12 +1228,83 @@ check_root_permission() {
   fi
 }
 
+# Function to get Duo version
+get_duo_version() {
+    local version=""
+    local login_duo_path=""
+    
+    # Find login_duo binary in common locations
+    for path in /usr/sbin/login_duo /usr/local/sbin/login_duo /sbin/login_duo; do
+        if [ -f "$path" ] && [ -x "$path" ]; then
+            login_duo_path="$path"
+            break
+        fi
+    done
+    
+    # If not found in common paths, try command -v
+    if [ -z "$login_duo_path" ]; then
+        if command -v login_duo >/dev/null 2>&1; then
+            login_duo_path="login_duo"
+        fi
+    fi
+    
+    # Try to get version from login_duo -v (capture both stdout and stderr)
+    if [ -n "$login_duo_path" ]; then
+        # Try to get version - login_duo -v might output to stderr or stdout
+        # Don't fail on error codes, just capture output
+        local output=$($login_duo_path -v 2>&1 || true)
+        
+        # Extract version number (look for patterns like "2.2.2" or "login_duo 2.2.2")
+        if [ -n "$output" ]; then
+            # Try to extract version number (e.g., "2.2.2" or "2.2.0")
+            version=$(echo "$output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+            
+            # If no version pattern found, try to get the first line and clean it (but skip error messages)
+            if [ -z "$version" ]; then
+                local first_line=$(echo "$output" | head -n1 | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                if [ -n "$first_line" ] && ! echo "$first_line" | grep -qi "error\|not found\|command\|usage"; then
+                    version="$first_line"
+                fi
+            fi
+        fi
+    fi
+    
+    # Clean up the version string if it exists
+    if [ -n "$version" ]; then
+        echo "$version"
+    else
+        echo "Not Installed"
+    fi
+}
+
 # Function to display the main menu with borders, clear only once initially
 main_menu() {
     clear  # Always clear the screen before showing the menu
     
+    # Get Duo version
+    DUO_VERSION=$(get_duo_version)
+    
     echo        "┌──────────────────────────────────────────────────────────────────────┐"
-    print_green "│                        DUO INSTALLER MENU V1.3                       |"
+    if [ "$DUO_VERSION" != "Not Installed" ]; then
+        VERSION_TEXT="Duo Version: $DUO_VERSION"
+        # Format: "                        DUO INSTALLER MENU V1.3                         Duo Version: [version] |"
+        # Box width is 70, borders take 2, so 68 chars for content
+        LEFT_PART="            DUO INSTALLER MENU V1.3"
+        # Calculate padding to right-align version (68 total - left part - version text)
+        PADDING=$((68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
+        if [ $PADDING -lt 1 ]; then
+            PADDING=1
+        fi
+        printf "\033[32m│%s%*s%s│\033[0m\n" "$LEFT_PART" "$PADDING" "" "$VERSION_TEXT  "
+    else
+        VERSION_TEXT="Duo Version: Not Installed"
+        LEFT_PART="             DUO INSTALLER MENU V1.3"
+        PADDING=$((68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
+        if [ $PADDING -lt 1 ]; then
+            PADDING=1
+        fi
+        printf "\033[32m│%s%*s%s│\033[0m\n" "$LEFT_PART" "$PADDING" "" "$VERSION_TEXT  "
+    fi
     echo        "├──────────────────────────────────────────────────────────────────────┤"
     echo        "│ Select an option:                                                    │"
     echo        "│                                                                      │"
