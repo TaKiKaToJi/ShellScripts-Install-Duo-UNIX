@@ -284,20 +284,31 @@ show_duo_pam_config() {
 check_os_version() {
   echo "Checking OS version, hostname, and IP address"
 
-  # Check for OS version
+  # Detect OS information across both modern and legacy distributions
   if [ -f /etc/os-release ]; then
-    # Source the file to get OS information
     . /etc/os-release
-    OS_INFO="$ID $VERSION_ID"
+    OS_INFO="${NAME:-$ID} ${VERSION:-$VERSION_ID}"
+  elif command -v lsb_release >/dev/null 2>&1; then
+    OS_INFO="$(lsb_release -sd 2>/dev/null)"
   else
-    OS_INFO="Unable to detect OS: /etc/os-release not found."
+    for release_file in /etc/centos-release /etc/redhat-release /etc/system-release /etc/issue /etc/*release* /etc/*version*; do
+      if [ -f "$release_file" ]; then
+        OS_INFO="$(head -n 1 "$release_file" 2>/dev/null)"
+        [ -n "$OS_INFO" ] && break
+      fi
+    done
+    [ -z "$OS_INFO" ] && OS_INFO="Unable to detect OS information."
   fi
 
   # Retrieve the hostname
   HOSTNAME=$(hostname 2>/dev/null || echo "Hostname command not found")
 
-  # Retrieve IP address
-  IP_ADDRESS=$(hostname -I | awk '{print $1}')
+  # Retrieve IP address (fallback for older iproute-less hosts)
+  if command -v hostname >/dev/null 2>&1 && hostname -I >/dev/null 2>&1; then
+    IP_ADDRESS=$(hostname -I | awk '{print $1}')
+  else
+    IP_ADDRESS=$(ip addr show 2>/dev/null | awk '/inet / && $2 !~ /^127/ {print $2; exit}' | cut -d'/' -f1)
+  fi
   [ -z "$IP_ADDRESS" ] && IP_ADDRESS="IP Address not found"
 
   # Display the results
@@ -671,7 +682,7 @@ compute_sha256() {
 
 # Prompt with Y/N and 5-second countdown auto-bypass to Yes
 prompt_bypass_with_timeout() {
-  local seconds=10
+  local seconds=60
   local answer=""
   while [ $seconds -gt 0 ]; do
     printf "\rChecksum verification failed. Continue anyway? (Y/n) Auto-continue in %ds: " "$seconds"
@@ -1283,22 +1294,31 @@ main_menu() {
     
     # Get Duo version
     DUO_VERSION=$(get_duo_version)
+
+    # Display currently selected Duo package version (from settings)
+    local SELECTED_VERSION_DISPLAY
+    if [ -n "$SELECTED_VERSION" ]; then
+        SELECTED_VERSION_DISPLAY="${SELECTED_VERSION#duo_unix-}"
+        SELECTED_VERSION_DISPLAY="${SELECTED_VERSION_DISPLAY%.tar.gz}"
+    else
+        SELECTED_VERSION_DISPLAY="Not Set"
+    fi
     
     echo        "┌──────────────────────────────────────────────────────────────────────┐"
     if [ "$DUO_VERSION" != "Not Installed" ]; then
         VERSION_TEXT="Duo Version: $DUO_VERSION"
         # Format: "                        DUO INSTALLER MENU V1.3                         Duo Version: [version] |"
         # Box width is 70, borders take 2, so 68 chars for content
-        LEFT_PART="            DUO INSTALLER MENU V1.3"
+        LEFT_PART="          DUO INSTALLER MENU V1.3"
         # Calculate padding to right-align version (68 total - left part - version text)
-        PADDING=$((68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
+        PADDING=$((   68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
         if [ $PADDING -lt 1 ]; then
             PADDING=1
         fi
         printf "\033[32m│%s%*s%s│\033[0m\n" "$LEFT_PART" "$PADDING" "" "$VERSION_TEXT  "
     else
-        VERSION_TEXT="Duo Version: Not Installed"
-        LEFT_PART="             DUO INSTALLER MENU V1.3"
+        VERSION_TEXT="   Duo Version: Not Installed"
+        LEFT_PART="          DUO INSTALLER MENU V1.3"
         PADDING=$((68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
         if [ $PADDING -lt 1 ]; then
             PADDING=1
@@ -1313,8 +1333,8 @@ main_menu() {
     echo        "│ 3) Check OS Version                                                  │"
     echo        "│ 4) Check Tools                                                       │"
     echo        "│ 5) Check Users List                                                  │"
-    echo        "│ 6) Settings Duo Version                                              │"
-    echo -e    "│ 7) Install Duo PAM \e[31m(Unfinished)\e[0m                                      │"
+    printf      "│ %-66s   │\n" "6) Settings Duo Version (${SELECTED_VERSION_DISPLAY})" 
+    echo -e    "│ 7) Install Duo PAM \e[31m(Warning)   \e[0m                                      │"
     echo        "│                                                                      │"
     echo        "└──────────────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
