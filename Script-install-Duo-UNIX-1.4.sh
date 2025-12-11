@@ -12,7 +12,7 @@ cleanup_duo_artifacts() {
     print_yellow "Cleaning up Duo Unix archives and source directories in $target_dir..."
 
     local DUO_TARBALLS=(
-      "duo_unix-2.2.2.tar.gz" "duo_unix-2.2.1.tar.gz" "duo_unix-2.2.0.tar.gz" "duo_unix-2.1.0.tar.gz"
+      "duo_unix-2.2.3.tar.gz" "duo_unix-2.2.2.tar.gz" "duo_unix-2.2.1.tar.gz" "duo_unix-2.2.0.tar.gz" "duo_unix-2.1.0.tar.gz"
       "duo_unix-2.0.4.tar.gz" "duo_unix-2.0.3.tar.gz" "duo_unix-2.0.2.tar.gz" "duo_unix-2.0.1.tar.gz"
       "duo_unix-2.0.0.tar.gz"
       "duo_unix-1.12.1.tar.gz" "duo_unix-1.12.0.tar.gz"
@@ -48,7 +48,7 @@ cleanup_duo_artifacts() {
     fi
 
     local DUO_DIRS=(
-      "duo_unix-2.2.2" "duo_unix-2.2.1" "duo_unix-2.2.0" "duo_unix-2.1.0"
+     "duo_unix-2.2.3" "duo_unix-2.2.2" "duo_unix-2.2.1" "duo_unix-2.2.0" "duo_unix-2.1.0"
       "duo_unix-2.0.4" "duo_unix-2.0.3" "duo_unix-2.0.2" "duo_unix-2.0.1" "duo_unix-2.0.0"
       "duo_unix-1.12.1" "duo_unix-1.12.0"
       "duo_unix-1.11.5" "duo_unix-1.11.4" "duo_unix-1.11.3" "duo_unix-1.11.2" "duo_unix-1.11.1" "duo_unix-1.11.0"
@@ -572,7 +572,6 @@ check_tools_and_install() {
 # Function to install Duo
 run_install_duo() {
   show_loading_animation 3
-  echo "----------------------------------"
   
   check_tools_and_install  # Call the function to check tools and install
   
@@ -740,7 +739,12 @@ check_internet_install_duo() {
 #menu Settings
 
 # Global variable to store the selected version
-SELECTED_VERSION="duo_unix-2.2.2.tar.gz"
+SELECTED_VERSION=""
+# Global variable to store the selected checksum (when using online list)
+SELECTED_CHECKSUM=""
+
+# Toggle using live Duo version list (default: ON, uses current release)
+USE_ONLINE_VERSION=true
 
 # Global array to store ignored tools
 IGNORED_TOOLS=()
@@ -749,6 +753,9 @@ IGNORED_TOOLS=()
 get_expected_checksum() {
   local filename="$1"
   case "$filename" in
+    duo_unix-2.2.3.tar.gz)
+      echo "b7b3016383f4373e26dc566fecb94e7b8b97eb7d9b54647dcca372790018c03e"
+      ;;
     duo_unix-2.2.2.tar.gz)
       echo "99c3fdf33905c82fd681217db6abe48a6be2ae36aacc0735043c20a7defa2913"
       ;;
@@ -853,6 +860,138 @@ fetch_release_notes() {
     rm -f response.json
 }
 
+# Fetch Duo Unix versions (live list from duo.com) and set selection + checksum
+fetch_duo_version_online() {
+    local CHECKSUM_URL="https://duo.com/docs/checksums#duo-unix"
+
+    echo "Fetching Duo Unix versions..."
+    local PAGE
+    PAGE=$(curl -s "$CHECKSUM_URL")
+
+    # Extract "checksum filename"
+    local RAW_LIST
+    RAW_LIST=$(echo "$PAGE" | grep -oE '[a-f0-9]{64}[[:space:]]+duo_unix-[0-9.]+\.tar\.gz')
+
+    if [ -z "$RAW_LIST" ]; then
+        echo "Failed to fetch version list."
+        return 1
+    fi
+
+    # Filter out versions below 2.0.0
+    local FILTERED_LIST
+    FILTERED_LIST=$(echo "$RAW_LIST" | awk '
+{
+    checksum=$1
+    file=$2
+
+    # extract version number X.Y.Z
+    match(file, /duo_unix-([0-9]+\.[0-9]+\.[0-9]+)/, arr)
+    ver=arr[1]
+
+    # Split version
+    n = split(ver, v, ".")
+
+    major=v[1]
+    minor=v[2]
+    patch=v[3]
+
+    # Keep only 2.x.x and above
+    if (major >= 2) {
+        print $0
+    }
+}')
+
+    # Put to arrays
+    local VERSIONS
+    local CHECKSUMS
+    mapfile -t VERSIONS <<< "$(echo "$FILTERED_LIST" | awk "{print \$2}")"
+    mapfile -t CHECKSUMS <<< "$(echo "$FILTERED_LIST" | awk "{print \$1}")"
+
+    echo ""
+    echo "============== Duo Unix Versions =============="
+    echo " (Default = Current Release)"
+    for i in "${!VERSIONS[@]}"; do
+        if [ "$i" -eq 0 ]; then
+            printf "%2d) %s   <-- Current Release\n" $((i+1)) "${VERSIONS[$i]}"
+        else
+            printf "%2d) %s\n" $((i+1)) "${VERSIONS[$i]}"
+        fi
+    done
+    echo "==============================================="
+    echo ""
+
+    local CHOICE
+    read -p "Select version number (press Enter for Current Release): " CHOICE
+
+    # Default = Current Release
+    local INDEX
+    if [ -z "$CHOICE" ]; then
+        INDEX=0
+        echo "Using default: ${VERSIONS[0]} (Current Release)"
+    else
+        INDEX=$((CHOICE - 1))
+    fi
+
+    if [ -z "${VERSIONS[$INDEX]}" ]; then
+        echo "Invalid selection."
+        return 1
+    fi
+
+    SELECTED_VERSION="${VERSIONS[$INDEX]}"
+    SELECTED_CHECKSUM="${CHECKSUMS[$INDEX]}"
+    print_green "Selected (online): $SELECTED_VERSION"
+    return 0
+}
+
+# Fetch and select the current release (first entry) without prompting
+fetch_duo_current_release_online() {
+    local CHECKSUM_URL="https://duo.com/docs/checksums#duo-unix"
+    local PAGE
+    PAGE=$(curl -s "$CHECKSUM_URL")
+
+    local RAW_LIST
+    RAW_LIST=$(echo "$PAGE" | grep -oE '[a-f0-9]{64}[[:space:]]+duo_unix-[0-9.]+\.tar\.gz')
+    if [ -z "$RAW_LIST" ]; then
+        echo "Failed to fetch version list."
+        return 1
+    fi
+
+    local FILTERED_LIST
+    FILTERED_LIST=$(echo "$RAW_LIST" | awk '
+{
+    checksum=$1
+    file=$2
+    match(file, /duo_unix-([0-9]+\.[0-9]+\.[0-9]+)/, arr)
+    ver=arr[1]
+    n = split(ver, v, ".")
+    major=v[1]; minor=v[2]; patch=v[3]
+    # Keep only 2.x.x and above
+    if (major >= 2) { print $0 }
+}')
+
+    mapfile -t VERSIONS <<< "$(echo "$FILTERED_LIST" | awk "{print \$2}")"
+    mapfile -t CHECKSUMS <<< "$(echo "$FILTERED_LIST" | awk "{print \$1}")"
+
+    if [ ${#VERSIONS[@]} -eq 0 ]; then
+        echo "No suitable versions found."
+        return 1
+    fi
+
+    SELECTED_VERSION="${VERSIONS[0]}"
+    SELECTED_CHECKSUM="${CHECKSUMS[0]}"
+    print_green "Selected (online current release): $SELECTED_VERSION"
+    return 0
+}
+
+# Fetch checksum for a specific version from duo.com (used during install)
+get_online_checksum_for_version() {
+    local version_file="$1"
+    local CHECKSUM_URL="https://duo.com/docs/checksums#duo-unix"
+    local PAGE
+    PAGE=$(curl -s "$CHECKSUM_URL")
+    echo "$PAGE" | grep -oE "[a-f0-9]{64}[[:space:]]+$version_file" | awk '{print $1}' | head -n1
+}
+
 
 
 # Function for the main settings menu
@@ -870,15 +1009,24 @@ settings() {
         DEFAULT_VERSION_DISPLAY="${SELECTED_VERSION#duo_unix-}"
         DEFAULT_VERSION_DISPLAY="${DEFAULT_VERSION_DISPLAY%.tar.gz}"
     else
-        DEFAULT_VERSION_DISPLAY="Not Set"
+        DEFAULT_VERSION_DISPLAY="Unset"
     fi
-    
-    printf      "│ 1) Duo Version (%b)%38s│\n" "\033[32m${DEFAULT_VERSION_DISPLAY}\033[0m" ""
-    echo        "│ 2) Settings Ignore Install Tools                            │"
-    echo -e     "│ 3) Fix Repository \033[31m(CentOS 7 Only)\033[0m                           │"
-    echo        "│ 0) Back To Main menu                                        │"
-    echo        "│                                                             │"
-    echo        "└─────────────────────────────────────────────────────────────┘"
+
+    # Colorized online status
+    local ONLINE_STATUS
+    if [ "$USE_ONLINE_VERSION" = true ]; then
+        ONLINE_STATUS="\033[32mON\033[0m"
+    else
+        ONLINE_STATUS="\033[31mOFF\033[0m"
+    fi
+
+    printf "│ 1) Duo Version (%b)%38s│\n" "\033[32m${DEFAULT_VERSION_DISPLAY}\033[0m" ""
+    echo   "│ 2) Settings Ignore Install Tools                            │"
+    echo -e "│ 3) Fix Repository \033[31m(CentOS 7 Only)\033[0m                           │"
+    printf "│ 4) Online Duo Versions (duo.com) %-35b │\n" "$ONLINE_STATUS"
+    echo   "│ 0) Back To Main menu                                        │"
+    echo   "│                                                             │"
+    echo   "└─────────────────────────────────────────────────────────────┘"
     read -p "Enter your choice: " CHOICE
     echo ""
 
@@ -891,6 +1039,9 @@ settings() {
             ;;
         3)
             fix_centos7_repo
+            ;;
+        4)
+            settings_toggle_online_versions
             ;;
         0)
             main_menu
@@ -910,18 +1061,45 @@ settings_duo_version() {
     echo "Settings Menu - Choose a Duo Unix version to download:"
     echo "======================================================"
     echo ""
-    
+
+    # Online mode uses live list from duo.com
+    if [ "$USE_ONLINE_VERSION" = true ]; then
+        echo -e "Mode: \033[32mOnline (duo.com checksums)\033[0m"
+        echo ""
+        # Always prompt with the live list so user can choose any available version
+        if ! fetch_duo_version_online; then
+            print_red "Failed to fetch online Duo versions."
+            read -p "Press Enter to return to the menu..."
+            settings
+            return
+        fi
+
+        local TAG="${SELECTED_VERSION%.tar.gz}"
+        fetch_release_notes "$TAG"
+
+        read -p "Save this version as default (Y/n)? " CONFIRMATION
+        if [[ "$CONFIRMATION" =~ ^[Yy]$ || -z "$CONFIRMATION" ]]; then
+            print_green "Version $SELECTED_VERSION saved as default (online)."
+        else
+            print_red "Version not saved. Returning to settings..."
+        fi
+        read -p "Press Enter to return to the menu..."
+        settings
+        return
+    fi
+
+    # Offline/embedded list
     # Show current default version
     local CURRENT_DEFAULT
     if [ -n "$SELECTED_VERSION" ]; then
         CURRENT_DEFAULT="${SELECTED_VERSION#duo_unix-}"
         CURRENT_DEFAULT="${CURRENT_DEFAULT%.tar.gz}"
     else
-        CURRENT_DEFAULT="2.2.2"
+        CURRENT_DEFAULT="Current Release"
     fi
     
     # Build menu with dynamic default indicator
-    local versions=("2.2.2" "2.2.1" "2.2.0" "2.0.4" "2.0.3" "2.0.2" "2.0.1" "2.0.0")
+    local versions=("2.2.3" "2.2.2" "2.2.1" "2.2.0" "2.0.4" "2.0.3" "2.0.2" "2.0.1" "2.0.0")
     local index=1
     for version in "${versions[@]}"; do
         if [ "$version" == "$CURRENT_DEFAULT" ]; then
@@ -941,20 +1119,21 @@ settings_duo_version() {
     echo ""
     echo "0) Return to main menu"
     echo ""
-    read -p "Choose a version (1-6 or 99): " CHOICE
+    read -p "Choose a version (1-8 or 99): " CHOICE
 
     case $CHOICE in
-        1) SELECTED_VERSION="duo_unix-2.2.2.tar.gz"; fetch_release_notes "duo_unix-2.2.2";;
-        2) SELECTED_VERSION="duo_unix-2.2.1.tar.gz"; fetch_release_notes "duo_unix-2.2.1";;
-        3) SELECTED_VERSION="duo_unix-2.2.0.tar.gz"; fetch_release_notes "duo_unix-2.2.0";;
-        4) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; fetch_release_notes "duo_unix-2.0.4";;
-        5) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; fetch_release_notes "duo_unix-2.0.3";;
-        6) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; fetch_release_notes "duo_unix-2.0.2";;
-        5) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; fetch_release_notes "duo_unix-2.0.1";;
-        7) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; fetch_release_notes "duo_unix-2.0.0";;
-        99) SELECTED_VERSION="duo_unix-latest.tar.gz";;
+        1) SELECTED_VERSION="duo_unix-2.2.3.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.2.3";;
+        2) SELECTED_VERSION="duo_unix-2.2.2.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.2.2";;
+        3) SELECTED_VERSION="duo_unix-2.2.1.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.2.1";;
+        4) SELECTED_VERSION="duo_unix-2.2.0.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.2.0";;
+        5) SELECTED_VERSION="duo_unix-2.0.4.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.0.4";;
+        6) SELECTED_VERSION="duo_unix-2.0.3.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.0.3";;
+        7) SELECTED_VERSION="duo_unix-2.0.2.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.0.2";;
+        8) SELECTED_VERSION="duo_unix-2.0.1.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.0.1";;
+        9) SELECTED_VERSION="duo_unix-2.0.0.tar.gz"; SELECTED_CHECKSUM=""; fetch_release_notes "duo_unix-2.0.0";;
+        99) SELECTED_VERSION="duo_unix-latest.tar.gz"; SELECTED_CHECKSUM="";;
         0) settings; return;;
-        *) echo "Invalid choice. Returning to settings..."; read -p "Press Enter to return to the menu..."; settings_duo_version;;
+        *) echo "Invalid choice. Returning to settings..."; read -p "Press Enter to return to the menu..."; settings_duo_version; return;;
     esac
 
     # Ask for confirmation to save the selected version
@@ -1084,6 +1263,39 @@ settings_ignore_tools() {
     done
 }
 
+# Toggle using the online Duo version list (duo.com checksums page)
+settings_toggle_online_versions() {
+    clear
+    echo "Toggle Online Duo Versions (from duo.com)"
+    echo "========================================="
+    echo ""
+    if [ "$USE_ONLINE_VERSION" = true ]; then
+        echo -e "Current status: \033[32mON (use live list)\033[0m"
+    else
+        echo -e "Current status: \033[31mOFF (use embedded list)\033[0m"
+    fi
+    echo ""
+    read -p "Turn on live Duo versions? (Y/n, Enter keeps current): " ANSW
+    if [ -z "$ANSW" ]; then
+        print_yellow "No change made."
+        read -p "Press Enter to return to Settings..." _
+        settings
+        return
+    fi
+
+    if [[ "$ANSW" =~ ^[Yy]$ ]]; then
+        USE_ONLINE_VERSION=true
+        print_green "Online Duo version selection is ENABLED."
+    elif [[ "$ANSW" =~ ^[Nn]$ ]]; then
+        USE_ONLINE_VERSION=false
+        print_green "Online Duo version selection is DISABLED. Embedded list will be used."
+    else
+        print_red "Invalid choice. No change made."
+    fi
+    read -p "Press Enter to return to Settings..." _
+    settings
+}
+
 fix_centos7_repo() {
     detect_os
 
@@ -1171,43 +1383,81 @@ fix_centos7_repo() {
 
 install_duo() {
 
+  if [ "$USE_ONLINE_VERSION" = true ]; then
+    print_yellow "Using live Duo version selection from Settings (duo.com)"
+    if [ -z "$SELECTED_VERSION" ]; then
+      print_yellow "No online version selected yet. Fetching current release..."
+      if ! fetch_duo_current_release_online; then
+        print_red "Failed to fetch Duo online versions."
+        return
+      fi
+    fi
+
+    # Ensure we have checksum for the selected version
+    if [ -z "$SELECTED_CHECKSUM" ]; then
+      SELECTED_CHECKSUM=$(get_online_checksum_for_version "$SELECTED_VERSION")
+    fi
+
+    if [ -z "$SELECTED_CHECKSUM" ]; then
+      print_red "Could not obtain checksum for $SELECTED_VERSION from duo.com."
+      return
+    fi
+
+    local URL="https://dl.duosecurity.com/$SELECTED_VERSION"
+    echo ""
+    echo "Downloading: $SELECTED_VERSION"
+    wget --content-disposition "$URL" -O "$SELECTED_VERSION"
+    if [ $? -ne 0 ]; then
+      print_red "Failed to download Duo Unix."
+      return
+    fi
+
+    echo "Verifying checksum (duo.com)..."
+    echo "$SELECTED_CHECKSUM  $SELECTED_VERSION" | sha256sum -c -
+    if [ $? -ne 0 ]; then
+      print_red "Checksum FAILED for $SELECTED_VERSION"
+      return
+    fi
+    print_green "Checksum OK (duo.com)."
+  else
     echo "Downloading Duo Unix version $SELECTED_VERSION..."
     wget --content-disposition "https://dl.duosecurity.com/$SELECTED_VERSION" -O "$SELECTED_VERSION"
     if [ $? -ne 0 ]; then
         print_red "Failed to download Duo Unix. Exiting..."
     fi
 
-  # Verify sha256 integrity if possible
-  EXPECTED_SHA=$(get_expected_checksum "$SELECTED_VERSION")
-  ACTUAL_SHA=""
-  if [ -z "$EXPECTED_SHA" ]; then
-    # Try remote .sha256 if available
-    if wget -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
-      EXPECTED_SHA=$(awk '{print $1}' "$SELECTED_VERSION.sha256" | head -n1)
-      rm -f "$SELECTED_VERSION.sha256"
+    # Verify sha256 integrity if possible (embedded logic)
+    EXPECTED_SHA=$(get_expected_checksum "$SELECTED_VERSION")
+    ACTUAL_SHA=""
+    if [ -z "$EXPECTED_SHA" ]; then
+      # Try remote .sha256 if available
+      if wget -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
+        EXPECTED_SHA=$(awk '{print $1}' "$SELECTED_VERSION.sha256" | head -n1)
+        rm -f "$SELECTED_VERSION.sha256"
+      fi
     fi
-  fi
-  ACTUAL_SHA=$(compute_sha256 "$SELECTED_VERSION")
-  if [ -z "$ACTUAL_SHA" ]; then
-    print_yellow "sha256 tool not found; skipping checksum verification."
-  else
-    if [ -n "$EXPECTED_SHA" ]; then
-      if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-        print_red "SHA256 mismatch for $SELECTED_VERSION"
-        echo "Expected: $EXPECTED_SHA"
-        echo "Actual  : $ACTUAL_SHA"
-        if ! prompt_bypass_with_timeout; then
-          print_red "Aborting installation due to checksum mismatch."
-          main_menu
-          return
+    ACTUAL_SHA=$(compute_sha256 "$SELECTED_VERSION")
+    if [ -z "$ACTUAL_SHA" ]; then
+      print_yellow "sha256 tool not found; skipping checksum verification."
+    else
+      if [ -n "$EXPECTED_SHA" ]; then
+        if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+          print_red "SHA256 mismatch for $SELECTED_VERSION"
+          echo "Expected: $EXPECTED_SHA"
+          echo "Actual  : $ACTUAL_SHA"
+          if ! prompt_bypass_with_timeout; then
+            print_red "Aborting installation due to checksum mismatch."
+            main_menu
+            return
+          else
+            print_yellow "Bypassing checksum failure and continuing..."
+          fi
         else
-          print_yellow "Bypassing checksum failure and continuing..."
+          print_green "SHA256 verified successfully."
         fi
       else
-        print_green "SHA256 verified successfully."
+        print_yellow "No expected SHA256 available; skipping verification."
       fi
-    else
-      print_yellow "No expected SHA256 available; skipping verification."
     fi
   fi
 
@@ -1327,6 +1577,9 @@ install_duo() {
   clear
   # Restart SSH service after configuration
   restart_ssh_service
+
+  # Return to script base directory so subsequent menu actions run in the right path
+  cd "$SCRIPT_BASE_DIR" || true
 
   # print_green "Duo installation completed."
   # main_menu
