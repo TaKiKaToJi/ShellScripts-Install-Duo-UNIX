@@ -150,17 +150,6 @@ show_loading_animation() {
 
 
 check_internet_install_duo_pam() {
-    # Check if Duo PAM is already installed first (before any downloads)
-    if rpm -q duo_unix > /dev/null 2>&1; then
-        local INSTALLED_VERSION
-        INSTALLED_VERSION=$(rpm -q duo_unix)
-        print_yellow "Duo Unix PAM is already installed ($INSTALLED_VERSION)."
-        echo "If you want to reinstall, please uninstall first using option 2."
-        read -p "Press Enter to return to the menu..."
-        main_menu
-        return
-    fi
-
     echo "Checking internet connection..."
 
     # Check 1: Internet connectivity test using ping and port checks
@@ -675,122 +664,29 @@ show_loading_animation 3  # Wait before proceeding
   # main_menu  # Return to main menu after checking tools
 }
 
-# Function to configure Duo Unix (edit config, show config, edit SSH, restart SSH)
-configure_duo_after_install() {
-    # Check if login_duo.conf already exists
-    if [ -f /etc/duo/login_duo.conf ] || [ -f /etc/login_duo.conf ]; then
-        print_green "Duo Unix is already configured."
-        echo "Configuring Duo Unix..."
-        
-        # If the config file exists, edit it
-        if [ -f /etc/duo/login_duo.conf ]; then
-            echo "Found login_duo.conf file."
-            if [ -x "$(command -v nano)" ]; then
-                nano /etc/duo/login_duo.conf
-            else
-                vi /etc/duo/login_duo.conf
-            fi
-        else
-            echo "Found login_duo.conf file in /etc."
-            if [ -x "$(command -v nano)" ]; then
-                nano /etc/login_duo.conf
-            else
-                vi /etc/login_duo.conf
-            fi
-        fi
-    else
-        print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
-        return 1
-    fi
-
-    # Function to display Duo 2FA login configuration
-    show_duo_config() {
-        clear
-        echo ""
-        echo "--------------------------------------------"
-        echo ""
-        echo ""
-        echo -e "\e[38;2;0;255;0m\e[1m# Duo 2FA login\e[0m"
-        echo "ForceCommand /usr/sbin/login_duo"
-        echo "PermitTunnel no"
-        echo "AllowTcpForwarding no"
-        echo ""
-        echo ""
-        echo "--------------------------------------------"
-        echo ""
-        echo "Please manually select and copy the above configuration text."
-        echo "Right-click to copy, then paste it where needed."
-        read -p "Press Enter to continue..."
-        show_loading_animation 2
-    }
-
-    # Call the function
-    show_duo_config
-
-    # Edit SSH configuration
-    echo "Editing SSH configuration..."
-    cd /etc/ssh
-    if [ -x "$(command -v nano)" ]; then
-        nano sshd_config
-    else
-        vi sshd_config
-    fi
-
-    clear
-    # Restart SSH service after configuration
-    restart_ssh_service
-}
-
 check_internet_install_duo() {
-    # Check if Duo is already installed first (before any downloads)
-    local CURRENT_DUO_VERSION
-    CURRENT_DUO_VERSION=$(get_duo_version)
-    if [ "$CURRENT_DUO_VERSION" != "Not Installed" ]; then
-        print_green "Duo Unix is already installed (version: $CURRENT_DUO_VERSION)."
-        echo "Configuring Duo Unix..."
-        configure_duo_after_install
-        read -p "Press Enter to return to the menu..."
-        main_menu
-        return
-    fi
-
-    echo -e "\033[33mChecking internet connection...\033[0m"
-
-    # Extra check for Duo download host availability
-    check_duo_download_host() {
-        local TEST_URL="https://dl.duosecurity.com"
-        echo -e "\033[36mCheck 4: Testing Duo download host ($TEST_URL)...\033[0m"
-        if curl -I -s --connect-timeout 5 "$TEST_URL" >/dev/null; then
-            echo -e "\033[32mCheck 4 passed: dl.duosecurity.com is reachable.\033[0m"
-            return 0
-        fi
-        echo -e "\033[31mCheck 4 failed: Unable to reach dl.duosecurity.com.\033[0m"
-        print_yellow "Disabling online Duo mode and reverting to embedded versions."
-        USE_ONLINE_VERSION=false
-        return 1
-    }
+    echo "Checking internet connection..."
 
   # Check 1: Internet connectivity test using ping and port checks
     echo "Check 1: Testing internet connectivity with ping..."
     if ping -c 1 www.google.com > /dev/null 2>&1; then
-        echo -e "\033[32mCheck 1 passed: Internet is connected (via ping).\033[0m"
+        echo "Check 1 passed: Internet is connected (via ping)."
 
         # Check if ports 80 and 443 are reachable
         echo "Checking connectivity to port 80..."
         if nc -z -w 5 www.google.com 443 > /dev/null 2>&1; then
-            echo -e "\033[32mPort 80 is reachable.\033[0m"
+            echo "Port 80 is reachable."
         else
             echo -e "\033[0;31mPort 80 is not reachable\033[0m"
         fi
 
         echo "Checking connectivity to port 443..."
         if nc -z -w 5 www.google.com 80 > /dev/null 2>&1; then
-            echo -e "\033[32mPort 443 is reachable.\033[0m"
+            echo "Port 443 is reachable."
         else
             echo -e "\033[0;31mPort 443 is not reachable\033[0m"
         fi
 
-        check_duo_download_host
         start_duo_install_flow
         return
     else
@@ -800,8 +696,7 @@ check_internet_install_duo() {
     # Check 2: Using curl to fetch Google
     echo "Check 2: Testing with curl to Google..."
     if curl -s --head http://www.google.com | head -n 1 | grep "HTTP/1.[01] [23].." > /dev/null; then
-        echo -e "\033[32mCheck 2 passed: Internet is connected (via curl).\033[0m"
-        check_duo_download_host
+        echo "Check 2 passed: Internet is connected (via curl)."
         start_duo_install_flow
         return
     else
@@ -811,8 +706,7 @@ check_internet_install_duo() {
     # Check 3: Using wget to download headers from Google
     echo "Check 3: Testing with wget to Google..."
     if wget --spider -q http://www.google.com; then
-        echo -e "\033[32mCheck 3 passed: Internet is connected (via wget).\033[0m"
-        check_duo_download_host
+        echo "Check 3 passed: Internet is connected (via wget)."
         start_duo_install_flow
         return
     else
@@ -851,20 +745,6 @@ SELECTED_CHECKSUM=""
 
 # Toggle using live Duo version list (default: ON, uses current release)
 USE_ONLINE_VERSION=true
-
-# Fallback helper to disable online mode and rely on embedded versions
-fallback_to_offline_mode() {
-  local reason="$1"
-  if [ -n "$reason" ]; then
-    print_red "$reason"
-  fi
-  USE_ONLINE_VERSION=false
-  SELECTED_CHECKSUM=""
-  if [ -z "$SELECTED_VERSION" ]; then
-    SELECTED_VERSION="duo_unix-2.2.3.tar.gz"
-  fi
-  print_yellow "Online Duo mode disabled. Using embedded list (default: $SELECTED_VERSION)."
-}
 
 # Global array to store ignored tools
 IGNORED_TOOLS=()
@@ -921,12 +801,12 @@ compute_sha256() {
   fi
 }
 
-# Prompt with Y/N and 60-second countdown auto-cancel (Enter or Y/y = continue)
+# Prompt with Y/N and 5-second countdown auto-bypass to Yes
 prompt_bypass_with_timeout() {
   local seconds=60
   local answer=""
   while [ $seconds -gt 0 ]; do
-    printf "\rChecksum verification failed. Continue anyway? (Y/n) Auto-cancel in %ds: " "$seconds"
+    printf "\rChecksum verification failed. Continue anyway? (Y/n) Auto-continue in %ds: " "$seconds"
     # Read a single character with 1-second timeout
     read -t 1 -n 1 answer 2>/dev/null
     if [ $? -eq 0 ]; then
@@ -936,16 +816,11 @@ prompt_bypass_with_timeout() {
     seconds=$((seconds - 1))
   done
   echo ""
-  # If no key was pressed, auto-cancel
-  if [ -z "$answer" ]; then
+  if [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]]; then
+    return 0
+  else
     return 1
   fi
-  # Treat Y/y or Enter as continue
-  if [[ "$answer" =~ ^[Yy]$ || "$answer" == $'\n' ]]; then
-    return 0
-  fi
-  # Any other key = cancel
-  return 1
 }
 
 # Function to fetch and display release notes from GitHub
@@ -999,7 +874,6 @@ fetch_duo_version_online() {
 
     if [ -z "$RAW_LIST" ]; then
         echo "Failed to fetch version list."
-        fallback_to_offline_mode "Failed to fetch Duo online versions."
         return 1
     fi
 
@@ -1027,23 +901,11 @@ fetch_duo_version_online() {
     }
 }')
 
-    if [ -z "$FILTERED_LIST" ]; then
-        echo "Failed to fetch Duo online versions."
-        fallback_to_offline_mode
-        return 1
-    fi
-
     # Put to arrays
     local VERSIONS
     local CHECKSUMS
     mapfile -t VERSIONS <<< "$(echo "$FILTERED_LIST" | awk "{print \$2}")"
     mapfile -t CHECKSUMS <<< "$(echo "$FILTERED_LIST" | awk "{print \$1}")"
-
-    if [ ${#VERSIONS[@]} -eq 0 ]; then
-        echo "No suitable online versions found."
-        fallback_to_offline_mode
-        return 1
-    fi
 
     echo ""
     echo "============== Duo Unix Versions =============="
@@ -1091,7 +953,6 @@ fetch_duo_current_release_online() {
     RAW_LIST=$(echo "$PAGE" | grep -oE '[a-f0-9]{64}[[:space:]]+duo_unix-[0-9.]+\.tar\.gz')
     if [ -z "$RAW_LIST" ]; then
         echo "Failed to fetch version list."
-        fallback_to_offline_mode "Failed to fetch Duo online versions."
         return 1
     fi
 
@@ -1108,18 +969,11 @@ fetch_duo_current_release_online() {
     if (major >= 2) { print $0 }
 }')
 
-    if [ -z "$FILTERED_LIST" ]; then
-        echo "Failed to fetch Duo online versions."
-        fallback_to_offline_mode
-        return 1
-    fi
-
     mapfile -t VERSIONS <<< "$(echo "$FILTERED_LIST" | awk "{print \$2}")"
     mapfile -t CHECKSUMS <<< "$(echo "$FILTERED_LIST" | awk "{print \$1}")"
 
     if [ ${#VERSIONS[@]} -eq 0 ]; then
         echo "No suitable versions found."
-        fallback_to_offline_mode
         return 1
     fi
 
@@ -1529,74 +1383,45 @@ fix_centos7_repo() {
 
 install_duo() {
 
-  local online_mode="$USE_ONLINE_VERSION"
-
-  if [ "$online_mode" = true ]; then
+  if [ "$USE_ONLINE_VERSION" = true ]; then
     print_yellow "Using live Duo version selection from Settings (duo.com)"
     if [ -z "$SELECTED_VERSION" ]; then
       print_yellow "No online version selected yet. Fetching current release..."
       if ! fetch_duo_current_release_online; then
-        fallback_to_offline_mode "Failed to fetch Duo online versions."
-        online_mode=false
+        print_red "Failed to fetch Duo online versions."
+        return
       fi
     fi
 
-    if [ "$online_mode" = true ]; then
-      local URL="https://dl.duosecurity.com/$SELECTED_VERSION"
-      echo ""
-      echo "Downloading: $SELECTED_VERSION"
-      wget --no-check-certificate --content-disposition "$URL" -O "$SELECTED_VERSION"
-      if [ $? -ne 0 ]; then
-        fallback_to_offline_mode "Failed to download Duo Unix from dl.duosecurity.com."
-        online_mode=false
-      fi
+    # Ensure we have checksum for the selected version
+    if [ -z "$SELECTED_CHECKSUM" ]; then
+      SELECTED_CHECKSUM=$(get_online_checksum_for_version "$SELECTED_VERSION")
     fi
 
-    if [ "$online_mode" = true ]; then
-      # Verify sha256 integrity using embedded checksums only
-      local EXPECTED_SHA
-      EXPECTED_SHA=$(get_expected_checksum "$SELECTED_VERSION")
-      local ACTUAL_SHA=""
-      if [ -z "$EXPECTED_SHA" ]; then
-        # Try remote .sha256 if available
-        if wget --no-check-certificate -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
-          EXPECTED_SHA=$(awk '{print $1}' "$SELECTED_VERSION.sha256" | head -n1)
-          rm -f "$SELECTED_VERSION.sha256"
-        fi
-      fi
-      ACTUAL_SHA=$(compute_sha256 "$SELECTED_VERSION")
-      if [ -z "$ACTUAL_SHA" ]; then
-        print_yellow "sha256 tool not found; skipping checksum verification."
-      else
-        if [ -n "$EXPECTED_SHA" ]; then
-          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-            print_red "SHA256 mismatch for $SELECTED_VERSION"
-            echo "Expected: $EXPECTED_SHA"
-            echo "Actual  : $ACTUAL_SHA"
-            if ! prompt_bypass_with_timeout; then
-              print_red "Aborting installation due to checksum mismatch."
-              main_menu
-              return
-            else
-              print_yellow "Bypassing checksum failure and continuing..."
-            fi
-          else
-            print_green "SHA256 verified successfully (embedded)."
-          fi
-        else
-          print_yellow "No expected SHA256 available; skipping verification."
-        fi
-      fi
+    if [ -z "$SELECTED_CHECKSUM" ]; then
+      print_red "Could not obtain checksum for $SELECTED_VERSION from duo.com."
+      return
     fi
-  fi
 
-  if [ "$online_mode" != true ]; then
-    USE_ONLINE_VERSION=false
-    if [ -z "$SELECTED_VERSION" ]; then
-        SELECTED_VERSION="duo_unix-2.2.3.tar.gz"
+    local URL="https://dl.duosecurity.com/$SELECTED_VERSION"
+    echo ""
+    echo "Downloading: $SELECTED_VERSION"
+    wget --content-disposition "$URL" -O "$SELECTED_VERSION"
+    if [ $? -ne 0 ]; then
+      print_red "Failed to download Duo Unix."
+      return
     fi
+
+    echo "Verifying checksum (duo.com)..."
+    echo "$SELECTED_CHECKSUM  $SELECTED_VERSION" | sha256sum -c -
+    if [ $? -ne 0 ]; then
+      print_red "Checksum FAILED for $SELECTED_VERSION"
+      return
+    fi
+    print_green "Checksum OK (duo.com)."
+  else
     echo "Downloading Duo Unix version $SELECTED_VERSION..."
-    wget --no-check-certificate --content-disposition "https://dl.duosecurity.com/$SELECTED_VERSION" -O "$SELECTED_VERSION"
+    wget --content-disposition "https://dl.duosecurity.com/$SELECTED_VERSION" -O "$SELECTED_VERSION"
     if [ $? -ne 0 ]; then
         print_red "Failed to download Duo Unix. Exiting..."
     fi
@@ -1606,7 +1431,7 @@ install_duo() {
     ACTUAL_SHA=""
     if [ -z "$EXPECTED_SHA" ]; then
       # Try remote .sha256 if available
-      if wget --no-check-certificate -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
+      if wget -q "https://dl.duosecurity.com/$SELECTED_VERSION.sha256" -O "$SELECTED_VERSION.sha256"; then
         EXPECTED_SHA=$(awk '{print $1}' "$SELECTED_VERSION.sha256" | head -n1)
         rm -f "$SELECTED_VERSION.sha256"
       fi
@@ -1662,7 +1487,27 @@ install_duo() {
   # Check if login_duo.conf already exists
   if [ -f /etc/duo/login_duo.conf ] || [ -f /etc/login_duo.conf ]; then
     print_green "Duo Unix is already configured."
-    configure_duo_after_install
+    echo "Configuring Duo Unix..."
+    
+    # If the config file exists, edit it
+    if [ -f /etc/duo/login_duo.conf ]; then
+      echo "Found login_duo.conf file."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/duo/login_duo.conf
+      else
+        vi /etc/duo/login_duo.conf
+      fi
+    else
+      echo "Found login_duo.conf file in /etc."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/login_duo.conf
+      else
+        vi /etc/login_duo.conf
+      fi
+    fi
+    
+    # Change directory to Duo Unix source directory for configuration
+    cd "$DUO_DIR"
   else
     # Install Duo Unix
     echo "Installing Duo Unix..."
@@ -1675,8 +1520,63 @@ install_duo() {
     fi
 
     # Configure Duo Unix
-    configure_duo_after_install
+    echo "Configuring Duo Unix..."
+    if [ -f /etc/duo/login_duo.conf ]; then
+      echo "Found login_duo.conf file."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/duo/login_duo.conf
+      else
+        vi /etc/duo/login_duo.conf
+      fi
+    elif [ -f /etc/login_duo.conf ]; then
+      echo "Found login_duo.conf file in /etc."
+      if [ -x "$(command -v nano)" ]; then
+        nano /etc/login_duo.conf
+      else
+        vi /etc/login_duo.conf
+      fi
+    else
+      print_red "Error: login_duo.conf file not found in /etc/duo or /etc."
+     # main_menu
+    fi
   fi
+
+  # Function to display Duo 2FA login configuration
+  show_duo_config() {
+    clear
+    echo ""
+    echo "--------------------------------------------"
+    echo ""
+    echo ""
+    echo -e "\e[38;2;0;255;0m\e[1m# Duo 2FA login\e[0m"
+    echo "ForceCommand /usr/sbin/login_duo"
+    echo "PermitTunnel no"
+    echo "AllowTcpForwarding no"
+    echo ""
+    echo ""
+    echo "--------------------------------------------"
+    echo ""
+    echo "Please manually select and copy the above configuration text."
+    echo "Right-click to copy, then paste it where needed."
+    read -p "Press Enter to continue..."
+    show_loading_animation 2
+  }
+
+  # Call the function
+  show_duo_config
+
+  # Edit SSH configuration
+  echo "Editing SSH configuration..."
+  cd /etc/ssh
+  if [ -x "$(command -v nano)" ]; then
+    nano sshd_config
+  else
+    vi sshd_config
+  fi
+
+  clear
+  # Restart SSH service after configuration
+  restart_ssh_service
 
   # Return to script base directory so subsequent menu actions run in the right path
   cd "$SCRIPT_BASE_DIR" || true
@@ -2041,7 +1941,7 @@ main_menu() {
         VERSION_TEXT="Duo Version: $DUO_VERSION"
         # Format: "                        DUO INSTALLER MENU V1.3                         Duo Version: [version] |"
         # Box width is 70, borders take 2, so 68 chars for content
-        LEFT_PART="          DUO INSTALLER MENU V1.4"
+        LEFT_PART="          DUO INSTALLER MENU V1.3"
         # Calculate padding to right-align version (68 total - left part - version text)
         PADDING=$((   68 - ${#LEFT_PART} - ${#VERSION_TEXT}))
         if [ $PADDING -lt 1 ]; then
